@@ -14,13 +14,28 @@ Target deliverable: VST3 instrument (JUCE 8 + CMake) hosted in Ableton
 Live 12. Full design and phased build plan: [PROPOSAL.md](PROPOSAL.md).
 Working rules for autonomous builds: [CLAUDE.md](CLAUDE.md).
 
-## Status: Phase 0 complete → awaiting CHECKPOINT 0
+## Status: Phase 1 complete → awaiting CHECKPOINT 1 (play it in Ableton)
 
-The Python audition rig is built, all objective oracles pass, and the
-CHECKPOINT 0 listening matrix is rendered in
-[`renders/checkpoint0/`](renders/checkpoint0/) (see its
-[MANIFEST.md](renders/checkpoint0/MANIFEST.md) for what to listen for).
+CHECKPOINT 0 passed: genus taxonomy and drift coherence both confirmed by
+ear. The JUCE plugin (VST3 + Standalone) now builds with all Phase 1 gates
+green — pluginval strictness 10, C++ eigenvalues matching the Phase 0 Python
+rig, the FFT oracle running against the real C++ DSP, sanitizers clean.
 Current state in detail: [STATUS.md](STATUS.md).
+
+## Plugin quickstart
+
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8
+ctest --test-dir build
+
+# gates
+tools/run_pluginval.sh
+.venv/bin/python -m prototype.oracles_cpp build
+```
+
+The VST3 installs itself to `~/Library/Audio/Plug-Ins/VST3/`; the Standalone
+app lands in `build/curvsynth_plugin_artefacts/Release/Standalone/`.
 
 ## Phase 0 quickstart
 
