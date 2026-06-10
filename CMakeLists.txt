@@ -91,4 +91,17 @@ if(CURV_BUILD_PLUGIN)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
+
+    # Re-sign after JUCE's moduleinfo.json generation: if the manifest is
+    # written after ad-hoc signing, the seal breaks and Ableton silently
+    # skips the bundle during its plugin scan (observed in the Morphos
+    # project). Force a final signature so the seal always covers the
+    # finished bundle, both in the build tree and the installed copy.
+    if(APPLE)
+        add_custom_command(TARGET curvsynth_plugin_VST3 POST_BUILD
+            COMMAND codesign --force -s - "$<TARGET_BUNDLE_DIR:curvsynth_plugin_VST3>"
+            COMMAND codesign --force -s - "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/curvsynth.vst3"
+            COMMAND codesign --verify --verbose=2 "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/curvsynth.vst3"
+            COMMENT "Re-signing VST3 so the seal covers moduleinfo.json")
+    endif()
 endif()
