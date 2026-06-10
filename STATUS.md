@@ -1,6 +1,21 @@
 # Project status
 
-**Phase 0 — COMPLETE (2026-06-10). Holding at CHECKPOINT 0 for Julian's audition.**
+**Phase 0 — COMPLETE. CHECKPOINT 0 PASSED (2026-06-10): proceed.**
+
+Julian's by-ear verdict:
+- Claim 1 (genus taxonomy): **pass** — "metallic objects with distinct
+  densities and shapes," all in a bell/industrial-clang family.
+- Claim 2 (coherence): **pass** — flow reads as "a change applied to a
+  consistent sound" vs the decorrelated control.
+- Damping defaults: plausible but hard to judge without alternatives →
+  `renders/checkpoint0_palette/` added (see below).
+- Open question raised: is the engine confined to metallic physical
+  modeling? Answered with the palette renders: damping design, register,
+  mode count, geometry-as-harmonicity (8:1 torus → exact harmonic series →
+  string family), and sustained excitation (Phase 2 bow) each move it to a
+  different instrument family. The metallic character of the checkpoint0
+  matrix = impulse strike + long ring + low tilt + inharmonic spectra,
+  i.e. one corner of the space.
 
 ## What exists
 

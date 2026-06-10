@@ -98,6 +98,39 @@ def render_flowing(times: np.ndarray, lam_traj: np.ndarray,
     return _normalize(out, p.peak_db)
 
 
+def render_sustained(lam: np.ndarray, phi_at_strike: np.ndarray, duration: float,
+                     p: RenderParams, attack: float = 1.0, release: float = 1.5,
+                     mod_depth: float = 0.6, mod_rate: float = 1.4,
+                     seed: int = 0) -> np.ndarray:
+    """Crude bowed/blown excitation preview (the real friction model is
+    Phase 2): each mode sustains at its coupling gain, slowly and
+    independently modulated by band-limited noise — the stochastic energy of
+    a bow without per-sample noise synthesis."""
+    rng = np.random.default_rng(seed)
+    freqs = mode_frequencies(lam, p.f_note)
+    audible = freqs < 0.45 * p.sr
+    gains = _gains(freqs, phi_at_strike, p)[audible]
+    freqs = freqs[audible]
+    k = freqs.shape[0]
+
+    n = int(duration * p.sr)
+    t = np.arange(n) / p.sr
+
+    # smooth per-mode gain modulation: cubic spline through random keyframes
+    n_keys = max(4, int(duration * mod_rate) + 2)
+    key_t = np.linspace(0, duration, n_keys)
+    keys = 1.0 + mod_depth * rng.standard_normal((n_keys, k))
+    mod = np.clip(CubicSpline(key_t, keys, axis=0)(t), 0.0, None)
+
+    env = np.minimum(1.0, t / attack) * np.minimum(1.0, (duration - t) / release)
+    env = np.sin(0.5 * np.pi * np.clip(env, 0, 1))  # cosine-ish edges
+
+    out = np.zeros(n)
+    for m in range(k):
+        out += gains[m] * mod[:, m] * np.sin(2 * np.pi * freqs[m] * t)
+    return _normalize(out * env, p.peak_db)
+
+
 def _normalize(x: np.ndarray, peak_db: float) -> np.ndarray:
     peak = np.abs(x).max()
     if peak == 0:
