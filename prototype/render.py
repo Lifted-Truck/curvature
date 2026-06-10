@@ -43,29 +43,33 @@ def _gains(freqs: np.ndarray, phi_at_strike: np.ndarray, p: RenderParams) -> np.
     return phi_at_strike * mallet
 
 
-def _decay_rates(freqs: np.ndarray, p: RenderParams) -> np.ndarray:
-    t60_k = p.t60 * (freqs[0] / freqs) ** p.tilt
+def _decay_rates(freqs: np.ndarray, p: RenderParams,
+                 t60_per_mode: np.ndarray = None) -> np.ndarray:
+    """Damping is a design choice, not physics: tilt may be negative
+    (highs outlast lows) and t60_per_mode may be any pattern at all."""
+    t60_k = p.t60 * (freqs[0] / freqs) ** p.tilt if t60_per_mode is None else t60_per_mode
     return LN_1000 / t60_k
 
 
 def render_static(lam: np.ndarray, phi_at_strike: np.ndarray, duration: float,
-                  p: RenderParams) -> np.ndarray:
+                  p: RenderParams, t60_per_mode: np.ndarray = None,
+                  normalize: bool = True) -> np.ndarray:
     freqs = mode_frequencies(lam, p.f_note)
     audible = freqs < 0.45 * p.sr
     gains = _gains(freqs, phi_at_strike, p)[audible]
-    rates = _decay_rates(freqs, p)[audible]
+    rates = _decay_rates(freqs, p, t60_per_mode)[audible]
     freqs = freqs[audible]
 
     t = np.arange(int(duration * p.sr)) / p.sr
     out = np.zeros_like(t)
     for f, g, r in zip(freqs, gains, rates):
         out += g * np.exp(-r * t) * np.sin(2 * np.pi * f * t)
-    return _normalize(out, p.peak_db)
+    return _normalize(out, p.peak_db) if normalize else out
 
 
 def render_flowing(times: np.ndarray, lam_traj: np.ndarray,
                    phi_at_strike: np.ndarray, duration: float,
-                   p: RenderParams) -> np.ndarray:
+                   p: RenderParams, normalize: bool = True) -> np.ndarray:
     """Single strike at t=0; frequencies drift along the trajectory while the
     modes ring out. Gains/decays are set from the t=0 spectrum (the strike
     happens on the start metric)."""
@@ -95,7 +99,7 @@ def render_flowing(times: np.ndarray, lam_traj: np.ndarray,
         env = gains * np.exp(-rates * t[s:e, None])
         out[s:e] = np.sum(env * np.sin(ph), axis=1)
         phase = ph[-1]
-    return _normalize(out, p.peak_db)
+    return _normalize(out, p.peak_db) if normalize else out
 
 
 def render_sustained(lam: np.ndarray, phi_at_strike: np.ndarray, duration: float,

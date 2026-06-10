@@ -73,6 +73,31 @@ def _metric_valid(mesh: Mesh, lengths: np.ndarray) -> bool:
         return False
 
 
+def spectrum_schedule(mesh: Mesh, lengths_at, times: np.ndarray, k: int = 96):
+    """Eigenvalue/eigenvector trajectories along an arbitrary metric schedule.
+
+    lengths_at(t) -> per-face edge lengths at time t. Returns
+    (lam_traj[n_frames, k], phi_frames list of (n, k)) with rows mode-tracked
+    against frame 0 by mass-weighted eigenvector overlap.
+    """
+    lam_traj = np.empty((len(times), k))
+    phi_frames = []
+    prev_phi = None
+    _, M = cotan_laplacian(mesh)
+    Mdiag = M.diagonal()
+
+    for fi, t in enumerate(times):
+        L, M = cotan_laplacian(mesh, lengths_at(t))
+        lam, phi = solve_modes(L, M, k=k)
+        if prev_phi is not None:
+            lam, phi = _match_modes(prev_phi, lam, phi, Mdiag)
+        prev_phi = phi
+        lam_traj[fi] = lam
+        phi_frames.append(phi)
+
+    return lam_traj, phi_frames
+
+
 def spectrum_trajectory(mesh: Mesh, u_start: np.ndarray, duration: float,
                         n_frames: int = 25, tau: float = 2.5, k: int = 96):
     """Eigenvalue trajectories under exponential metric relaxation.
@@ -84,23 +109,12 @@ def spectrum_trajectory(mesh: Mesh, u_start: np.ndarray, duration: float,
     log_start = np.log(_apply_conformal(mesh, u_start))
 
     times = np.linspace(0.0, duration, n_frames)
-    lam_traj = np.empty((n_frames, k))
-    prev_phi = None
-    prev_lam = None
-    _, M = cotan_laplacian(mesh)
-    Mdiag = M.diagonal()
 
-    for fi, t in enumerate(times):
+    def lengths_at(t):
         alpha = np.exp(-t / tau)
-        lengths = np.exp(log_base + alpha * (log_start - log_base))
-        L, M = cotan_laplacian(mesh, lengths)
-        lam, phi = solve_modes(L, M, k=k)
+        return np.exp(log_base + alpha * (log_start - log_base))
 
-        if prev_phi is not None:
-            lam, phi = _match_modes(prev_phi, lam, phi, Mdiag)
-        prev_phi, prev_lam = phi, lam
-        lam_traj[fi] = lam
-
+    lam_traj, _ = spectrum_schedule(mesh, lengths_at, times, k=k)
     return times, lam_traj
 
 

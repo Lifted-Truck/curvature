@@ -58,6 +58,17 @@ Julian's by-ear verdict:
 4. The five open decisions in PROPOSAL.md §8 (platform target, mode count,
    MPE plumbing, license posture) before Phase 1 starts.
 
+## Aesthetic direction (Julian, post-checkpoint): toward implausible objects
+
+SOPHIE-style hyperreal materiality: treat material signifiers (inharmonicity
+pattern, damping law, size, object identity) as free compositional
+parameters, with metric coherence supplying objecthood. Demos in
+`renders/checkpoint0_implausible/`: mid-phrase metric morph between
+instruments, anti-acoustic (negative-tilt) decay, size-oscillating "rubber
+bell", comb-damped material. Implication for Phase 2+: SHARPEN (reverse
+flow), arbitrary per-mode damping masks, and metric morph targets are
+first-class performance features, not edge cases.
+
 ## Next (pending checkpoint verdict)
 
 Phase 1 — JUCE 8 plugin skeleton with static geometry: CMake project, VST3 +
