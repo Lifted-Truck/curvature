@@ -26,9 +26,17 @@ Current state in detail: [STATUS.md](STATUS.md).
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m prototype.oracles           # objective gates (exit 0 = all pass)
-.venv/bin/python -m prototype.audition_matrix   # re-render the listening matrix
+
+# objective gates — exit 0 means all pass
+.venv/bin/python -m prototype.oracles
+
+# re-render the listening matrix into renders/checkpoint0/
+.venv/bin/python -m prototype.audition_matrix
 ```
+
+(Comments on their own lines: interactive zsh doesn't strip trailing `#`
+comments by default, so same-line comments get passed to the script as
+arguments.)
 
 ## Layout
 

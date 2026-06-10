@@ -99,4 +99,6 @@ def main(out_dir: str = "renders/checkpoint0") -> None:
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    if len(sys.argv) > 2:
+        sys.exit(f"usage: python -m prototype.audition_matrix [out_dir]  (got extra args {sys.argv[2:]})")
+    main(*sys.argv[1:2])
