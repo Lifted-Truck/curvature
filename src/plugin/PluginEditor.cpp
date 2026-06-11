@@ -246,23 +246,32 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
     addAndMakeVisible(kickButton_);
     kickAtt_ = std::make_unique<BA>(proc_.apvts, "kick", kickButton_);
 
-    for (auto [id, name] : { std::pair { "strike", "Strike" }, { "modes", "Modes" },
-                             { "mallet", "Mallet" }, { "t60", "T60" }, { "tilt", "Tilt" },
-                             { "release", "Release" }, { "flowrate", "Flow Rate" },
-                             { "press", "Press" }, { "bow", "Bow" }, { "comb", "Comb" },
-                             { "gain", "Gain" } })
-        addSlider(id, name);
+    addAndMakeVisible(copyButton_);
+    copyButton_.onClick = [this] {
+        juce::SystemClipboard::copyTextToClipboard(buildStateReport());
+    };
+
+    for (auto [id, name, suffix] : {
+             std::tuple { "strike", "Strike", "" }, { "modes", "Modes", "" },
+             { "mallet", "Mallet", " Hz" }, { "t60", "T60", " s" },
+             { "tilt", "Tilt", "" }, { "release", "Release", " s" },
+             { "flowrate", "Flow Rate", "" }, { "press", "Press", "" },
+             { "bow", "Bow", "" }, { "comb", "Comb", "" }, { "gain", "Gain", " dB" } })
+        addSlider(id, name, suffix);
 
     setSize(960, 560);
     setResizable(true, true);
     setResizeLimits(720, 420, 1600, 1000);
 }
 
-void CurvSynthEditor::addSlider(const juce::String& paramId, const juce::String& label)
+void CurvSynthEditor::addSlider(const juce::String& paramId, const juce::String& label,
+                                const juce::String& suffix)
 {
     auto slider = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,
                                                  juce::Slider::TextBoxRight);
-    slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 16);
+    slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 72, 16);
+    slider->setTextValueSuffix(suffix);
+    slider->setNumDecimalPlacesToDisplay(paramId == "modes" ? 0 : 2);
     addAndMakeVisible(*slider);
     sliderAtts_.push_back(std::make_unique<SA>(proc_.apvts, paramId, *slider));
 
@@ -272,6 +281,37 @@ void CurvSynthEditor::addSlider(const juce::String& paramId, const juce::String&
 
     sliders_.push_back(std::move(slider));
     labels_.push_back(std::move(lab));
+}
+
+juce::String CurvSynthEditor::buildStateReport() const
+{
+    auto raw = [this](const char* id) { return proc_.apvts.getRawParameterValue(id)->load(); };
+    auto choice = [this](const char* id) {
+        if (auto* p = dynamic_cast<juce::AudioParameterChoice*>(proc_.apvts.getParameter(id)))
+            return p->getCurrentChoiceName();
+        return juce::String();
+    };
+
+    const float strike = raw("strike");
+    const float rate = raw("flowrate");
+    const int vtx = (int) std::lround(strike * (float) std::max(manifold_.numVerts() - 1, 1));
+
+    juce::String s;
+    s << "curvsynth state report\n"
+      << "manifold: " << choice("manifold") << "\n"
+      << "strike: " << juce::String(strike, 3) << " (vertex " << vtx << ")\n"
+      << "modes: " << (int) raw("modes") << "\n"
+      << "mallet: " << juce::String(raw("mallet"), 0) << " Hz\n"
+      << "t60: " << juce::String(raw("t60"), 2) << " s, tilt " << juce::String(raw("tilt"), 2)
+      << ", release " << juce::String(raw("release"), 2) << " s, comb "
+      << juce::String(raw("comb"), 2) << "\n"
+      << "flow: " << choice("flowmode") << ", rate " << juce::String(rate, 2)
+      << " (dt " << juce::String(0.25f * rate * rate, 4) << "/step @40Hz)\n"
+      << "voices: " << choice("voicemode") << ", bow " << juce::String(raw("bow"), 2)
+      << ", press " << juce::String(raw("press"), 2) << "\n"
+      << "gain: " << juce::String(raw("gain"), 1) << " dB\n"
+      << "live curvature error max|K-Kbar|: " << juce::String(manifold_.curvatureErr(), 4) << "\n";
+    return s;
 }
 
 void CurvSynthEditor::paint(juce::Graphics& g)
@@ -291,11 +331,12 @@ void CurvSynthEditor::resized()
     right.removeFromTop(8);
 
     auto row = right.removeFromTop(26);
-    const int boxW = row.getWidth() / 4;
-    manifoldBox_.setBounds(row.removeFromLeft(boxW + 30).reduced(2));
-    flowBox_.setBounds(row.removeFromLeft(boxW - 20).reduced(2));
-    voiceBox_.setBounds(row.removeFromLeft(boxW).reduced(2));
-    kickButton_.setBounds(row.reduced(2));
+    const int rowW = row.getWidth();
+    manifoldBox_.setBounds(row.removeFromLeft(rowW * 30 / 100).reduced(2));
+    flowBox_.setBounds(row.removeFromLeft(rowW * 18 / 100).reduced(2));
+    voiceBox_.setBounds(row.removeFromLeft(rowW * 22 / 100).reduced(2));
+    kickButton_.setBounds(row.removeFromLeft(rowW * 12 / 100).reduced(2));
+    copyButton_.setBounds(row.reduced(2));
 
     const int rowH = juce::jmax(20, right.getHeight() / juce::jmax(1, (int) sliders_.size()));
     for (size_t i = 0; i < sliders_.size(); ++i) {

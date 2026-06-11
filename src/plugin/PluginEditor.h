@@ -24,6 +24,9 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
 
+    int numVerts() const { return frame_.numVerts; }
+    float curvatureErr() const { return frame_.curvatureErr; }
+
 private:
     void timerCallback() override;
     void rebuildMeshIfNeeded(int presetId);
@@ -70,7 +73,9 @@ private:
     using CA = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using BA = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
-    void addSlider(const juce::String& paramId, const juce::String& label);
+    void addSlider(const juce::String& paramId, const juce::String& label,
+                   const juce::String& suffix);
+    juce::String buildStateReport() const;
 
     CurvSynthProcessor& proc_;
     ManifoldView manifold_;
@@ -78,6 +83,7 @@ private:
 
     juce::ComboBox manifoldBox_, flowBox_, voiceBox_;
     juce::ToggleButton kickButton_ { "Kick" };
+    juce::TextButton copyButton_ { "Copy state" };
     std::vector<std::unique_ptr<juce::Slider>> sliders_;
     std::vector<std::unique_ptr<juce::Label>> labels_;
     std::vector<std::unique_ptr<SA>> sliderAtts_;

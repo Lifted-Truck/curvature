@@ -88,3 +88,27 @@ MPE, strike-point-per-note, metric-morph targets as a parameter,
 surgery/voice-splitting (stretch), OBJ import UX. Phase 4 polish: nicer
 shading, spectrum labels in Hz, curvature-injection by clicking with a
 modifier key.
+
+## Roadmap ideas (Julian, pre-checkpoint-3) with feasibility notes
+
+1. **Strike-responsive deformation** — mallet hits dent/ripple the object so
+   sound responds to performance. HIGH feasibility, near-term: note-on
+   events (vertex + velocity) posted over a lock-free queue to the geometry
+   thread -> localized curvature kick (press machinery reused); ripples =
+   damped wave equation on the conformal factor at geometry rate. Top
+   candidate for the next run.
+2. **Shape categories / extrusion** — beams, tuning forks, plates, ripple
+   textures. MEDIUM: standalone beam/plate presets are easy (manifolds with
+   boundary: cotan Laplacian handles free/clamped edges with minor changes);
+   *gluing* appendages onto existing meshes is the hard part (cousin of
+   surgery). Phase it: boundary presets first, gluing later.
+3. **4th dimension** — genuinely natural here: the engine is intrinsic (no
+   embedding needed), so a tet-meshed 3-manifold (3-sphere, 3-torus) can be
+   sonified by the same machinery ("the sound of a 4D bell"; mode density
+   grows audibly differently — Weyl asymptotics). Full 3D Ricci flow is
+   research-grade (Perelman/surgery), but a conformal Yamabe-type flow gives
+   the same RELAX/SHARPEN musical behavior. MEDIUM-HIGH effort, real payoff.
+4. **Mandelbulb** — EASY as a preset: marching-cubes the isosurface like
+   genus2; fractal surface roughness -> dense irregular spectrum with
+   strongly localized eigenfunctions (strike point becomes hyper-expressive;
+   pairs perfectly with SHARPEN). Cheap win next run.
