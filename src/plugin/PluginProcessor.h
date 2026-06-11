@@ -65,6 +65,7 @@ private:
     std::atomic<float>* pKick_ = nullptr;       // edge-triggered conformal kick
     std::atomic<float>* pVoiceMode_ = nullptr;  // Snapshot / Global
     std::atomic<float>* pBow_ = nullptr;
+    std::atomic<float>* pReset_ = nullptr;      // edge-triggered: restore base metric
     std::atomic<float>* pPress_ = nullptr;      // localized curvature injection
     std::atomic<float>* pPressSize_ = nullptr;  // bump falloff radius
     std::atomic<float>* pComb_ = nullptr;

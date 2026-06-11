@@ -35,6 +35,7 @@ private:
     CurvSynthProcessor& proc_;
     VizFrame frame_;
     Mesh displayMesh_;
+    std::vector<std::array<float, 3>> vertexNormals_;
     int meshPresetId_ = -1;
     float yaw_ = 0.6f, pitch_ = 0.25f;
     float meshExtent_ = 1.0f;
@@ -82,12 +83,13 @@ private:
 
     juce::ComboBox manifoldBox_, flowBox_, voiceBox_;
     juce::ToggleButton kickButton_ { "Kick" };
+    juce::ToggleButton resetButton_ { "Reset" };
     juce::TextButton copyButton_ { "Copy state" };
     std::vector<std::unique_ptr<juce::Slider>> sliders_;
     std::vector<std::unique_ptr<juce::Label>> labels_;
     std::vector<std::unique_ptr<SA>> sliderAtts_;
     std::unique_ptr<CA> manifoldAtt_, flowAtt_, voiceAtt_;
-    std::unique_ptr<BA> kickAtt_;
+    std::unique_ptr<BA> kickAtt_, resetAtt_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurvSynthEditor)
 };

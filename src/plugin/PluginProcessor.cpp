@@ -27,6 +27,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pKick_ = apvts.getRawParameterValue("kick");
     pVoiceMode_ = apvts.getRawParameterValue("voicemode");
     pBow_ = apvts.getRawParameterValue("bow");
+    pReset_ = apvts.getRawParameterValue("reset");
     pPress_ = apvts.getRawParameterValue("press");
     pPressSize_ = apvts.getRawParameterValue("presssize");
     pComb_ = apvts.getRawParameterValue("comb");
@@ -71,6 +72,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     layout.add(std::make_unique<P>("flowrate", "Flow Rate",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
     layout.add(std::make_unique<juce::AudioParameterBool>("kick", "Kick (perturb metric)", false));
+    // permanence is a feature (press leaves a trace via clamp saturation);
+    // reset is the optional way back to the pristine object
+    layout.add(std::make_unique<juce::AudioParameterBool>("reset", "Reset Shape", false));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         "voicemode", "Voices", juce::StringArray { "Snapshot", "Global Flow" }, 1));
     layout.add(std::make_unique<P>("bow", "Bow",
@@ -96,7 +100,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
 void CurvSynthProcessor::run()
 {
     int lastManifold = -1, lastModes = -1;
-    float lastStrike = -1.0f, lastKick = -1.0f;
+    float lastStrike = -1.0f, lastKick = -1.0f, lastReset = -1.0f;
     unsigned kickSeed = 1;
     double flowSinceResolve = 0.0;
     constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
@@ -130,6 +134,15 @@ void CurvSynthProcessor::run()
             publish = true;
         }
         lastKick = kick;
+
+        // every toggle of Reset Shape = restore the pristine base metric
+        const float reset = pReset_->load();
+        if (lastReset >= 0.0f && reset != lastReset) {
+            geometry_.flowReset();
+            flowSinceResolve = 0.0;
+            publish = true;
+        }
+        lastReset = reset;
 
         const float press = pPress_->load();
         if (press > 0.001f) {

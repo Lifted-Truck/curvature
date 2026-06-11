@@ -42,13 +42,42 @@ void ManifoldView::rebuildMeshIfNeeded(int presetId)
                               BinaryData::genus2_obj, (size_t) BinaryData::genus2_objSize);
     meshPresetId_ = presetId;
     faceOrder_.resize(displayMesh_.F.size());
+
+    // area-weighted vertex normals: press bulges displace along the surface
+    // normal, so a press reads as "pushing out of the surface" everywhere
+    // (radial displacement pushed inward on the inner wall of a torus)
+    const int nv = displayMesh_.numVertices();
+    vertexNormals_.assign((size_t) nv, { 0.0f, 0.0f, 0.0f });
+    for (const auto& f : displayMesh_.F) {
+        const auto &a = displayMesh_.V[(size_t) f[0]], &b = displayMesh_.V[(size_t) f[1]],
+                   &c = displayMesh_.V[(size_t) f[2]];
+        const double e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+        const double e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+        const double nx = e1[1] * e2[2] - e1[2] * e2[1];
+        const double ny = e1[2] * e2[0] - e1[0] * e2[2];
+        const double nz = e1[0] * e2[1] - e1[1] * e2[0];
+        for (int j = 0; j < 3; ++j) {
+            vertexNormals_[(size_t) f[j]][0] += (float) nx;
+            vertexNormals_[(size_t) f[j]][1] += (float) ny;
+            vertexNormals_[(size_t) f[j]][2] += (float) nz;
+        }
+    }
+    for (auto& nrm : vertexNormals_) {
+        const float len = std::sqrt(nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2]);
+        if (len > 1e-12f)
+            for (auto& x : nrm)
+                x /= len;
+    }
 }
 
 juce::Point<float> ManifoldView::project(int vi, float& depth) const
 {
     const auto& v = displayMesh_.V[(size_t) vi];
-    const float bulge = vi < frame_.numVerts ? 1.0f + 0.5f * frame_.uDev[vi] : 1.0f;
-    const float x = (float) v[0] * bulge, y = (float) v[1] * bulge, z = (float) v[2] * bulge;
+    const auto& nrm = vertexNormals_[(size_t) vi];
+    const float d = (vi < frame_.numVerts ? 0.35f * frame_.uDev[vi] : 0.0f) * meshExtent_;
+    const float x = (float) v[0] + nrm[0] * d;
+    const float y = (float) v[1] + nrm[1] * d;
+    const float z = (float) v[2] + nrm[2] * d;
     const float cy = std::cos(yaw_), sy = std::sin(yaw_);
     const float cp = std::cos(pitch_), sp = std::sin(pitch_);
     const float x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
@@ -253,6 +282,8 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
 
     addAndMakeVisible(kickButton_);
     kickAtt_ = std::make_unique<BA>(proc_.apvts, "kick", kickButton_);
+    addAndMakeVisible(resetButton_);
+    resetAtt_ = std::make_unique<BA>(proc_.apvts, "reset", resetButton_);
 
     addAndMakeVisible(copyButton_);
     copyButton_.onClick = [this] {
@@ -345,10 +376,11 @@ void CurvSynthEditor::resized()
 
     auto row = right.removeFromTop(26);
     const int rowW = row.getWidth();
-    manifoldBox_.setBounds(row.removeFromLeft(rowW * 30 / 100).reduced(2));
-    flowBox_.setBounds(row.removeFromLeft(rowW * 18 / 100).reduced(2));
-    voiceBox_.setBounds(row.removeFromLeft(rowW * 22 / 100).reduced(2));
-    kickButton_.setBounds(row.removeFromLeft(rowW * 12 / 100).reduced(2));
+    manifoldBox_.setBounds(row.removeFromLeft(rowW * 26 / 100).reduced(2));
+    flowBox_.setBounds(row.removeFromLeft(rowW * 16 / 100).reduced(2));
+    voiceBox_.setBounds(row.removeFromLeft(rowW * 20 / 100).reduced(2));
+    kickButton_.setBounds(row.removeFromLeft(rowW * 11 / 100).reduced(2));
+    resetButton_.setBounds(row.removeFromLeft(rowW * 12 / 100).reduced(2));
     copyButton_.setBounds(row.reduced(2));
 
     const int rowH = juce::jmax(20, right.getHeight() / juce::jmax(1, (int) sliders_.size()));

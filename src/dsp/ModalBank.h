@@ -32,6 +32,7 @@ public:
         numModes_ = 0;
         active_ = false;
         globalFrame_ = nullptr;
+        injectPos_ = injectLen_ = 0;
         for (int m = 0; m < kMaxModes; ++m)
             s_[m] = c_[m] = exc_[m] = 0.0f;
     }
@@ -56,7 +57,14 @@ public:
         // impulse (mallet) and bow are independent excitation levels:
         // impulse 1 / bow 0 = struck, impulse 0 / bow 1 = purely bowed,
         // both up = struck note with sustained bowing underneath
-        const float impulseGain = impulse_;
+        impulseAmp_ = impulse_;
+
+        // mallet contact time: energy enters over a raised-cosine window,
+        // not in one sample (a true impulse clicks). Harder mallet (higher
+        // cutoff) = shorter contact.
+        const float contactMs = std::clamp(1800.0f / malletCutoff, 0.3f, 6.0f);
+        injectLen_ = std::max(16, (int) (contactMs * 0.001f * sr_));
+        injectPos_ = 0;
 
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
@@ -67,7 +75,6 @@ public:
             freq_[k] = f;
             const float mallet = 1.0f / (1.0f + std::pow(f / malletCutoff, 4.0f));
             exc_[k] = velocity * frame.coupling[m] * mallet;
-            s_[k] += exc_[k] * impulseGain;
             k++;
         }
         numModes_ = k;
@@ -105,6 +112,15 @@ public:
                 updateCoefficients(false);
             const int run = std::min(n - i, samplesUntilControl_);
             for (int j = 0; j < run; ++j) {
+                if (injectPos_ < injectLen_) {
+                    // raised-cosine contact: weights sum to ~1 over the window
+                    const float w = impulseAmp_
+                        * (1.0f - std::cos(2.0f * (float) M_PI * (injectPos_ + 0.5f) / (float) injectLen_))
+                        / (float) injectLen_;
+                    for (int m = 0; m < numModes_; ++m)
+                        s_[m] += exc_[m] * w;
+                    ++injectPos_;
+                }
                 float sum = 0.0f;
                 for (int m = 0; m < numModes_; ++m) {
                     // ramped coefficients: linear step per sample
@@ -201,8 +217,11 @@ private:
     float f1_ = 1.0f;
     float bow_ = 0.0f;
     float impulse_ = 1.0f;
+    float impulseAmp_ = 1.0f;
     float bend_ = 1.0f;
     int bowAge_ = 0;
+    int injectPos_ = 0;
+    int injectLen_ = 0;
     uint32_t rng_ = 1;
     const SpectrumFrame* globalFrame_ = nullptr;
     DampingParams damping_;
