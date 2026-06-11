@@ -87,6 +87,11 @@ TEST_CASE("press gesture: localized curvature injection, healed by relax")
     for (int i = 0; i < 400; ++i)
         flow.step(0.3, +1.0);
     REQUIRE(flow.curvatureError() < 0.2 * err);            // relax heals the press
+
+    // press is mean-free (scale-neutral), so relax must restore the *base
+    // metric*, not converge to a uniformly rescaled copy of it
+    const Eigen::VectorXd residual = flow.logRadii() - flow.logRadiiBase();
+    REQUIRE(residual.cwiseAbs().maxCoeff() < 0.08);
 }
 
 TEST_CASE("flow reset restores the base spectrum")

@@ -147,6 +147,11 @@ void RicciFlow::press(int vertex, double amount, double dt)
             const double d = dist[(size_t) i] / 2.2;
             pressProfile_[i] = std::exp(-d * d);
         }
+        // mean-free: flow conserves total log-scale, so a net-positive press
+        // would leave a permanent uniform residual after relax. Subtracting
+        // the mean makes the press scale-neutral (bump here, micro-shrink
+        // everywhere else) and relax genuinely restores the base metric.
+        pressProfile_.array() -= pressProfile_.mean();
         pressVertex_ = vertex;
     }
 

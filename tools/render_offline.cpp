@@ -96,8 +96,8 @@ int main(int argc, char** argv)
 
     curv::ModalVoice voice;
     voice.prepare(sr);
+    voice.setBow(bow);  // before noteOn: bow crossfades the strike impulse out
     voice.noteOn(frame, 69, 1.0f, noteHz, mallet, { t60, tilt, release }, 0);
-    voice.setBow(bow);
     if (flowMode != 0)
         voice.setGlobalTuning(&frame);
 

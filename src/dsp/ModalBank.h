@@ -51,6 +51,11 @@ public:
         releasing_ = false;
         damping_ = damping;
         rng_ = 0x9e3779b9u ^ (order * 2654435761u);
+        bowAge_ = 0;
+
+        // bow is an alternative excitation, not a layer: it crossfades the
+        // mallet impulse out and swells in as sustained energy instead
+        const float impulseGain = 1.0f - 0.9f * bow_;
 
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
@@ -61,7 +66,7 @@ public:
             freq_[k] = f;
             const float mallet = 1.0f / (1.0f + std::pow(f / malletCutoff, 4.0f));
             exc_[k] = velocity * frame.coupling[m] * mallet;
-            s_[k] += exc_[k];  // impulse injection into the sine state
+            s_[k] += exc_[k] * impulseGain;
             k++;
         }
         numModes_ = k;
@@ -141,9 +146,13 @@ private:
 
         // bow: one stochastic energy packet per control interval, weighted
         // by the strike coupling pattern (the bow excites what the strike
-        // point couples to)
+        // point couples to), swelling in over ~0.6 s so the note has a
+        // bowed attack rather than a struck one
         if (bow_ > 0.0f && !releasing_) {
-            const float g = bow_ * bow_ * 0.02f;
+            ++bowAge_;
+            const float swell = std::min(1.0f,
+                (float) bowAge_ * kControlInterval / (0.6f * (float) sr_));
+            const float g = bow_ * bow_ * 0.03f * swell;
             for (int m = 0; m < numModes_; ++m) {
                 rng_ = rng_ * 1664525u + 1013904223u;
                 const float noise = (float) (int32_t) rng_ * 4.6566e-10f;  // ~[-1,1]
@@ -188,6 +197,7 @@ private:
     float f1_ = 1.0f;
     float bow_ = 0.0f;
     float bend_ = 1.0f;
+    int bowAge_ = 0;
     uint32_t rng_ = 1;
     const SpectrumFrame* globalFrame_ = nullptr;
     DampingParams damping_;

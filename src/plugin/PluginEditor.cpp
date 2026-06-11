@@ -125,14 +125,11 @@ void ManifoldView::paint(juce::Graphics& g)
 void ManifoldView::mouseDown(const juce::MouseEvent& e)
 {
     lastDrag_ = e.position;
-    dragMoved_ = false;
 }
 
 void ManifoldView::mouseDrag(const juce::MouseEvent& e)
 {
     const auto d = e.position - lastDrag_;
-    if (std::abs(d.x) + std::abs(d.y) > 3.0f)
-        dragMoved_ = true;
     yaw_ += d.x * 0.01f;
     pitch_ = juce::jlimit(-1.4f, 1.4f, pitch_ + d.y * 0.01f);
     lastDrag_ = e.position;
@@ -141,11 +138,13 @@ void ManifoldView::mouseDrag(const juce::MouseEvent& e)
 
 void ManifoldView::mouseUp(const juce::MouseEvent& e)
 {
-    if (dragMoved_ || meshPresetId_ < 0)
+    // total travel since mouse-down decides click vs drag — per-event deltas
+    // misfire on trackpads, which made strike picking feel unreliable
+    if (e.getDistanceFromDragStart() > 6 || meshPresetId_ < 0)
         return;
     const int nv = displayMesh_.numVertices();
     int best = -1;
-    float bestDist = 30.0f * 30.0f;
+    float bestDist = 60.0f * 60.0f;
     for (int i = 0; i < nv; ++i) {
         float depth = 0.0f;
         const auto p = project(i, depth);
@@ -207,6 +206,10 @@ void SpectrumView::paint(juce::Graphics& g)
         g.setColour(juce::Colours::white.withAlpha(0.15f));
     }
 
+    // comb damping kills every other mode on the audio side; mirror that
+    // here so the knob's effect is visible, not just audible
+    const float comb = proc_.apvts.getRawParameterValue("comb")->load();
+
     juce::Path path;
     for (int m = 0; m < numModes_; ++m) {
         path.clear();
@@ -215,7 +218,12 @@ void SpectrumView::paint(juce::Graphics& g)
             const float y = fy(hist_[i][m]);
             i == 0 ? path.startNewSubPath(x, y) : path.lineTo(x, y);
         }
-        g.setColour(juce::Colour(0xFF7F77DD).withAlpha(m == 0 ? 0.95f : 0.45f));
+        float alpha = m == 0 ? 0.95f : 0.45f;
+        if ((m & 1) != 0)
+            alpha *= 1.0f - 0.92f * comb;
+        if (alpha < 0.02f)
+            continue;
+        g.setColour(juce::Colour(0xFF7F77DD).withAlpha(alpha));
         g.strokePath(path, juce::PathStrokeType(m == 0 ? 2.0f : 1.2f));
     }
 

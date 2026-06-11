@@ -40,7 +40,6 @@ private:
     float meshExtent_ = 1.0f;
     int extentPresetId_ = -1;
     juce::Point<float> lastDrag_;
-    bool dragMoved_ = false;
     std::vector<int> faceOrder_;
 };
 
