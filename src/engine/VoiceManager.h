@@ -28,6 +28,20 @@ public:
             v.setDamping(d);
     }
 
+    // nullptr = snapshot mode; non-null = all voices track the live spectrum
+    // (pointer must remain valid for the current audio block)
+    void setGlobalFrame(const SpectrumFrame* frame)
+    {
+        for (auto& v : voices_)
+            v.setGlobalTuning(frame);
+    }
+
+    void setBow(float amount)
+    {
+        for (auto& v : voices_)
+            v.setBow(amount);
+    }
+
     void noteOn(const SpectrumFrame& frame, int midiNote, float velocity, float malletCutoff)
     {
         ModalVoice* slot = nullptr;

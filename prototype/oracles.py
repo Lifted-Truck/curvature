@@ -115,11 +115,46 @@ def oracle_fft_peaks(tol_cents: float = 1.0):
     return True, f"{int(resolvable.sum())} resolvable partials within {tol_cents} cent (worst {worst:.3f})"
 
 
+def oracle_ricci_flow():
+    """Phase 2 gate: forward Chow-Luo flow monotonically reduces
+    max|K_i - Kbar| on every preset genus; reverse flow respects clamps."""
+    from .ricci import RicciFlow
+    from .meshes import flat_torus
+
+    presets = [icosphere(3), flat_torus(32, 24, 1.0, 1.618), genus2()]
+    for mesh in presets:
+        flow = RicciFlow(mesh)
+        flow.perturb(0.6, seed=0)
+        prev = flow.curvature_error()
+        start = prev
+        for _ in range(300):
+            if flow.step(0.3) == 0.0:
+                return False, f"{mesh.name}: flow stuck"
+            err = flow.curvature_error()
+            if err > prev + 1e-9:
+                return False, f"{mesh.name}: K error increased {prev:.4f} -> {err:.4f}"
+            prev = err
+        if prev > 0.5 * start:
+            return False, f"{mesh.name}: insufficient convergence {start:.4f} -> {prev:.4f}"
+
+    clamp = 1.0
+    flow = RicciFlow(icosphere(3), u_clamp=clamp)
+    for _ in range(400):
+        flow.step(0.2, direction=-1.0)
+    dev = float(np.max(np.abs(flow.u - flow.u0)))
+    if dev > clamp + 1e-9:
+        return False, f"reverse flow violated clamp: |u-u0|={dev:.3f} > {clamp}"
+    if not flow._valid(flow.u):
+        return False, "reverse flow broke the metric"
+    return True, "forward flow monotone on genus 0/1/2; reverse clamps hold"
+
+
 ORACLES = [
     ("topology", oracle_topology),
     ("icosphere l(l+1)", oracle_icosphere),
     ("torus exact lattice", oracle_torus_exact),
     ("FFT peak <= 1 cent", oracle_fft_peaks),
+    ("Ricci flow convergence", oracle_ricci_flow),
 ]
 
 

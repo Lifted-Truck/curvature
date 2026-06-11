@@ -6,6 +6,11 @@
 //   render_offline --preset N --note-hz 220 --strike 0.42 --modes 96
 //                  --t60 30 --tilt 0 --mallet 20000 --release 0.3
 //                  --seconds 20 --sr 48000 --genus2-obj path --out out.wav
+//                  [--flow 0|1|2] [--flow-rate r] [--kick amp] [--bow b]
+// flow 1 = RELAX, 2 = SHARPEN; kick applies a conformal perturbation at t=0
+// (the displacement RELAX relaxes from). With flow on, the voice runs in
+// global mode and retunes to the evolving spectrum exactly as the plugin's
+// audio thread does.
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -66,6 +71,10 @@ int main(int argc, char** argv)
     const int sr = std::stoi(get("sr", "48000"));
     const std::string out = get("out", "render.wav");
     const std::string genus2Path = get("genus2-obj", "assets/manifolds/genus2.obj");
+    const int flowMode = std::stoi(get("flow", "0"));
+    const float flowRate = std::stof(get("flow-rate", "0.5"));
+    const double kickAmp = std::stod(get("kick", "0"));
+    const float bow = std::stof(get("bow", "0"));
 
     std::string objData;
     if (preset == (int) curv::PresetId::Genus2) {
@@ -79,6 +88,8 @@ int main(int argc, char** argv)
 
     curv::GeometryService geometry;
     geometry.loadPreset((curv::PresetId) preset, objData.data(), objData.size());
+    if (kickAmp > 0.0)
+        geometry.flowKick(kickAmp, 1);
 
     curv::SpectrumFrame frame;
     geometry.fillFrame(frame, modes, strike);
@@ -86,12 +97,26 @@ int main(int argc, char** argv)
     curv::ModalVoice voice;
     voice.prepare(sr);
     voice.noteOn(frame, 69, 1.0f, noteHz, mallet, { t60, tilt, release }, 0);
+    voice.setBow(bow);
+    if (flowMode != 0)
+        voice.setGlobalTuning(&frame);
 
     const int n = static_cast<int>(seconds * sr);
     std::vector<float> audio((size_t) n, 0.0f);
-    constexpr int kBlock = 512;
-    for (int i = 0; i < n; i += kBlock)
+    constexpr int kBlock = 1024;             // ~21 ms: one geometry step per block
+    const double dt = 0.25 * flowRate * flowRate;
+    double flowSinceResolve = 0.0;
+    for (int i = 0; i < n; i += kBlock) {
+        if (flowMode != 0 && dt > 0.0) {
+            flowSinceResolve += geometry.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
+            if (flowSinceResolve >= 0.6) {   // same cadence policy as the plugin
+                geometry.resolve();
+                flowSinceResolve = 0.0;
+            }
+            geometry.fillFrame(frame, modes, strike);
+        }
         voice.renderAdd(audio.data() + i, std::min(kBlock, n - i));
+    }
 
     // normalize to -3 dBFS like the Python rig
     float peak = 0.0f;

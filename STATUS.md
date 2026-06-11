@@ -1,68 +1,61 @@
 # Project status
 
-**Phase 1 — COMPLETE (2026-06-10). Holding at CHECKPOINT 1: play it in Ableton.**
+**Phase 2 — COMPLETE (2026-06-10). Holding at CHECKPOINT 2: the big one.**
 
-CHECKPOINT 0 passed earlier the same day (see git history for the Phase 0
-verdict details): genus taxonomy audible, drift coherence confirmed, aesthetic
-direction set toward implausible/"metaphysical" objects (SOPHIE reference) —
-Julian found the first implausible demos promising but "not as alien as I was
-imagining"; Phase 2 should push harder.
+The question on the table: **does flow sound like phrasing?** Play the plugin
+in Live — Kick + Relax while holding a chord, Sharpen mid-phrase, Flow Rate
+as a performance control. Offline previews: `renders/checkpoint2/`.
 
-## What exists
+Checkpoint history: CHECKPOINT 0 passed (genus taxonomy + drift coherence by
+ear; aesthetic direction = implausible/"metaphysical" objects, push beyond
+mild inversions). CHECKPOINT 1 passed ("It's working!" — loads and plays in
+Live 12.4.5b3).
 
-- **C++ plugin** (JUCE 8.0.6 + CMake, VST3 + Standalone, macOS-first):
-  - `src/geometry/` — intrinsic cotan Laplacian (edge lengths only),
-    Spectra shift-invert eigensolver, presets ported 1:1 from Python
-    (icosphere, flat lattice tori 1:1 / 1:1.618 / 8:1 harmonic, genus-2 OBJ
-    via BinaryData).
-  - `src/engine/` — `SpectrumFrame` (ratio + coupling tables), wait-free
-    SPSC triple-buffer `SpectrumBus`, `GeometryService`, 8-voice
-    `VoiceManager` with oldest/releasing stealing.
-  - `src/dsp/ModalBank.h` — coupled-form (rotation) resonators, fixed-size
-    state, linear coefficient ramps per 64-sample control interval.
-  - `src/plugin/` — APVTS params (manifold, strike point, mode count 8–128,
-    mallet, T60, tilt **(-1..2, negative = anti-acoustic)**, release, gain),
-    geometry worker thread, generic editor.
-  - The VST3 auto-installs to `~/Library/Audio/Plug-Ins/VST3/` on build.
-- **`tools/render_offline`** — headless render through the real ModalVoice
-  DSP; keeps spectral oracles alive (CLAUDE.md invariant).
-- **Phase 0 Python rig** retained as reference oracle (`prototype/`).
+## What's new in Phase 2
 
-## Phase 1 gates — all pass
+- **Chow–Luo combinatorial Ricci flow** (`src/geometry/RicciFlow.*`,
+  prototyped + validated in `prototype/ricci.py` first): inversive-distance
+  circle packing, explicit Euler with step-halving on metric validity and
+  (forward) on curvature-error monotonicity. Reverse flow (SHARPEN) runs the
+  field backwards under hard |u−u0| clamps — bounded expressive territory.
+- **Perturbation fast path:** Rayleigh quotients of the stale eigenbasis
+  with the current operator at every flow step (~25 ms); scheduled full
+  re-solves every 0.6 units of accumulated flow time, mode-matched by
+  eigenvector overlap × eigenvalue proximity, then **blended over 8 frames**
+  so a re-solve never lands as an audible step.
+- **Plugin params:** Flow (Off/Relax/Sharpen), Flow Rate, Kick (each toggle
+  = one conformal perturbation), Voices (Snapshot/Global Flow, default
+  Global — the instrument itself evolves under your hands), Bow.
+- **Bow excitation:** per-control-interval stochastic energy injection
+  weighted by the strike coupling pattern ("simple stochastic model first" —
+  refine by ear).
+- `render_offline` gained `--flow/--flow-rate/--kick/--bow` so the offline
+  oracle path exercises the full flow machinery.
 
-- pluginval strictness 10: **SUCCESS**
-- C++ eigenvalues vs Phase 0 Python dumps (`tests/data/spectra/`):
-  tori ≤ 1e-8 rel, icosphere/genus2 ≤ 1e-6 rel
-- FFT oracle on C++ render (`prototype/oracles_cpp.py`): 14 partials within
-  1 cent, worst 0.000
-- Catch2 suite (9 cases incl. plane-wave exactness, harmonic-series check,
-  voice stability under tilt sweeps, SPSC torn-read stress): pass
-- ASan+UBSan: tests + genus-2 render clean. TSan: SPSC stress clean.
-- Audio-thread allocations: none by construction (fixed-size voice/frame
-  state, wait-free bus, no locks/system calls in `processBlock`); verified
-  by code audit, not yet by malloc-canary instrumentation.
+## Phase 2 gates — all pass
 
-## Known Phase 1 scope notes
+- Forward flow: max |K_i − K̄| monotonically decreasing on **all five
+  presets** (Python oracle: genus 0/1/2; C++ test: icosphere + golden torus)
+- Eigenvalue trajectories continuous: ≤5% frame-to-frame ratio change
+  through fast-path updates AND scheduled re-solves (Catch2 test)
+- **30-min soak × 2** (golden torus and genus-2; 72k steps each, alternating
+  Relax/Sharpen/kick): no NaN/denormal/divergence
+- Reverse-flow clamps respected (Python oracle + C++ test)
+- pluginval strictness 10: SUCCESS (re-run post-Phase 2)
+- C++ FFT oracle: 14 partials within 1 cent (worst 0.000)
+- ASan+UBSan: full suite clean. TSan: SPSC bus stress clean (threading
+  pattern unchanged from Phase 1: single geometry producer, audio consumer).
 
-- Voices snapshot the spectrum at note-on (snapshot mode); global-flow mode
-  arrives with Phase 2 when frames actually evolve.
-- MPE deferred to Phase 3 (decision: custom voice manager keeps door open).
-- Pitch bend not yet wired.
-- Geometry thread re-solves only on parameter change (static phase); the
-  FIFO path is exercised exactly as the Phase 2 architecture requires.
+## Tuning notes for the checkpoint (everything by-ear is provisional)
 
-## CHECKPOINT 1 — what Julian checks (in Ableton Live 12)
-
-1. Plugin loads, plays, automates, and saves/restores state in a Live set.
-2. Latency/voice feel; strike-point sweep (nodal lines should audibly
-   reshape timbre); manifold switching.
-3. Negative tilt on a real keyboard — first playable taste of the
-   implausible direction.
+- Flow Rate maps quadratically to dt (max 0.25/step at 25 ms cadence).
+- Kick amplitude fixed at 0.6 conformal units; geometry-thread seed advances
+  per kick so each one is a different bump pattern.
+- Bow gain scales with amount²; injection at 750 Hz control rate.
 
 ## Next (pending checkpoint verdict)
 
-Phase 2 — Ricci flow modulation (the actual thesis): Chow–Luo combinatorial
-flow on the geometry thread, RELAX/SHARPEN, global-vs-snapshot voice mode,
-perturbation fast path between full re-solves, bow excitation. Given the
-aesthetic direction: SHARPEN ranges and metric-morph targets get first-class
-treatment.
+Phase 3 candidates, ordered by Julian's Phase-2 feedback: local curvature
+injection (pressure gesture), MPE, strike-point-per-note, surgery/voice
+splitting, OBJ import, deeper implausibility features (metric morph targets,
+per-mode damping masks as params). Phase 4: visualization UI.

@@ -29,8 +29,9 @@ public:
     {
         numModes_ = 0;
         active_ = false;
+        globalFrame_ = nullptr;
         for (int m = 0; m < kMaxModes; ++m)
-            s_[m] = c_[m] = 0.0f;
+            s_[m] = c_[m] = exc_[m] = 0.0f;
     }
 
     bool isActive() const { return active_; }
@@ -43,9 +44,11 @@ public:
                 uint32_t order)
     {
         note_ = midiNote;
+        noteHz_ = noteHz;
         startOrder_ = order;
         releasing_ = false;
         damping_ = damping;
+        rng_ = 0x9e3779b9u ^ (order * 2654435761u);
 
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
@@ -55,9 +58,8 @@ public:
                 break;  // ratios ascend; everything after is out too
             freq_[k] = f;
             const float mallet = 1.0f / (1.0f + std::pow(f / malletCutoff, 4.0f));
-            const float amp = velocity * frame.coupling[m] * mallet;
-            s_[k] += amp;  // impulse injection into the sine state
-            c_[k] = c_[k]; // cosine state untouched
+            exc_[k] = velocity * frame.coupling[m] * mallet;
+            s_[k] += exc_[k];  // impulse injection into the sine state
             k++;
         }
         numModes_ = k;
@@ -70,6 +72,13 @@ public:
     void noteOff() { releasing_ = true; samplesUntilControl_ = 0; }
 
     void setDamping(const DampingParams& damping) { damping_ = damping; }
+
+    // global-flow mode: retune ringing modes to the evolving spectrum.
+    // 'frame' must stay valid for the current audio block only.
+    void setGlobalTuning(const SpectrumFrame* frame) { globalFrame_ = frame; }
+
+    // sustained stochastic excitation (crude bow; refined by ear Phase 2+)
+    void setBow(float amount) { bow_ = amount; }
 
     // add this voice into out[0..n)
     void renderAdd(float* out, int n)
@@ -114,6 +123,29 @@ public:
 private:
     void updateCoefficients(bool immediate)
     {
+        // global-flow retune: pull mode frequencies from the live spectrum
+        // before computing rotation targets; the linear per-sample ramps
+        // below carry the sweep (coupled form stays stable under it)
+        if (globalFrame_ != nullptr) {
+            const float nyquistGuard = static_cast<float>(0.45 * sr_);
+            const int k = std::min(numModes_, globalFrame_->numModes);
+            for (int m = 0; m < k; ++m)
+                freq_[m] = std::min(noteHz_ * globalFrame_->ratio[m], nyquistGuard);
+            f1_ = freq_[0];
+        }
+
+        // bow: one stochastic energy packet per control interval, weighted
+        // by the strike coupling pattern (the bow excites what the strike
+        // point couples to)
+        if (bow_ > 0.0f && !releasing_) {
+            const float g = bow_ * bow_ * 0.02f;
+            for (int m = 0; m < numModes_; ++m) {
+                rng_ = rng_ * 1664525u + 1013904223u;
+                const float noise = (float) (int32_t) rng_ * 4.6566e-10f;  // ~[-1,1]
+                s_[m] += g * exc_[m] * noise;
+            }
+        }
+
         const float lnK = std::log(1000.0f);
         for (int m = 0; m < numModes_; ++m) {
             float t60 = releasing_
@@ -139,14 +171,19 @@ private:
     double sr_ = 48000.0;
     int numModes_ = 0;
     int note_ = -1;
+    float noteHz_ = 440.0f;
     uint32_t startOrder_ = 0;
     bool active_ = false;
     bool releasing_ = false;
     int samplesUntilControl_ = 0;
     float f1_ = 1.0f;
+    float bow_ = 0.0f;
+    uint32_t rng_ = 1;
+    const SpectrumFrame* globalFrame_ = nullptr;
     DampingParams damping_;
 
     float freq_[kMaxModes] = {};
+    float exc_[kMaxModes] = {};
     float s_[kMaxModes] = {};
     float c_[kMaxModes] = {};
     float rc_[kMaxModes] = {};

@@ -21,6 +21,11 @@ CurvSynthProcessor::CurvSynthProcessor()
     pTilt_ = apvts.getRawParameterValue("tilt");
     pRelease_ = apvts.getRawParameterValue("release");
     pGain_ = apvts.getRawParameterValue("gain");
+    pFlowMode_ = apvts.getRawParameterValue("flowmode");
+    pFlowRate_ = apvts.getRawParameterValue("flowrate");
+    pKick_ = apvts.getRawParameterValue("kick");
+    pVoiceMode_ = apvts.getRawParameterValue("voicemode");
+    pBow_ = apvts.getRawParameterValue("bow");
 
     startThread();
 }
@@ -54,6 +59,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
                                    juce::NormalisableRange<float>(0.05f, 8.0f, 0.0f, 0.5f), 0.3f));
     layout.add(std::make_unique<P>("gain", "Gain",
                                    juce::NormalisableRange<float>(-36.0f, 6.0f), -6.0f));
+
+    // ---- Phase 2: flow as performance gesture ----
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        "flowmode", "Flow", juce::StringArray { "Off", "Relax", "Sharpen" }, 0));
+    layout.add(std::make_unique<P>("flowrate", "Flow Rate",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
+    layout.add(std::make_unique<juce::AudioParameterBool>("kick", "Kick (perturb metric)", false));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        "voicemode", "Voices", juce::StringArray { "Snapshot", "Global Flow" }, 1));
+    layout.add(std::make_unique<P>("bow", "Bow",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     return layout;
 }
 
@@ -62,24 +78,59 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
 void CurvSynthProcessor::run()
 {
     int lastManifold = -1, lastModes = -1;
-    float lastStrike = -1.0f;
+    float lastStrike = -1.0f, lastKick = -1.0f;
+    unsigned kickSeed = 1;
+    double flowSinceResolve = 0.0;
+    constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
+                                              // bounds fast-path drift regardless of rate
+    constexpr double kMaxDt = 0.25;           // per-step flow time at rate 1.0
 
     while (!threadShouldExit()) {
         const int manifold = (int) pManifold_->load();
         const int modes = (int) pModes_->load();
         const float strike = pStrike_->load();
+        const int flowMode = (int) pFlowMode_->load();   // 0 off, 1 relax, 2 sharpen
+        const float flowRate = pFlowRate_->load();
+        const float kick = pKick_->load();
 
-        if (manifold != lastManifold || modes != lastModes || strike != lastStrike) {
-            if (manifold != lastManifold)
-                geometry_.loadPreset((PresetId) manifold,
-                                     BinaryData::genus2_obj, (size_t) BinaryData::genus2_objSize);
+        bool publish = false;
+
+        if (manifold != lastManifold) {
+            geometry_.loadPreset((PresetId) manifold,
+                                 BinaryData::genus2_obj, (size_t) BinaryData::genus2_objSize);
+            flowSinceResolve = 0.0;
+            publish = true;
+        }
+        if (modes != lastModes || strike != lastStrike)
+            publish = true;
+
+        // every toggle of the Kick parameter = one conformal perturbation
+        if (lastKick >= 0.0f && kick != lastKick) {
+            geometry_.flowKick(0.6, kickSeed++);
+            geometry_.resolve();  // fresh basis on the kicked metric
+            flowSinceResolve = 0.0;
+            publish = true;
+        }
+        lastKick = kick;
+
+        if (flowMode != 0 && flowRate > 0.0f) {
+            const double dt = kMaxDt * flowRate * flowRate;
+            flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
+            if (flowSinceResolve >= kResolveFlowTime) {
+                geometry_.resolve();
+                flowSinceResolve = 0.0;
+            }
+            publish = true;
+        }
+
+        if (publish) {
             geometry_.fillFrame(bus_.beginWrite(), modes, strike);
             bus_.publish();
             lastManifold = manifold;
             lastModes = modes;
             lastStrike = strike;
         }
-        wait(kGeometryPollMs);
+        wait(kGeometryPollMs >> (flowMode != 0 ? 1 : 0));  // 25 ms while flowing
     }
 }
 
@@ -104,6 +155,9 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const bool haveSpectrum = currentFrame_.numModes > 0 || latest != nullptr;
 
     voices_.setDamping({ pT60_->load(), pTilt_->load(), pRelease_->load() });
+    voices_.setGlobalFrame(((int) pVoiceMode_->load() == 1 && currentFrame_.numModes > 0)
+                               ? &currentFrame_ : nullptr);
+    voices_.setBow(pBow_->load());
     const float mallet = pMallet_->load();
     gainSmoothed_.setTargetValue(juce::Decibels::decibelsToGain(pGain_->load()));
 

@@ -56,6 +56,11 @@ private:
     std::atomic<float>* pTilt_ = nullptr;
     std::atomic<float>* pRelease_ = nullptr;
     std::atomic<float>* pGain_ = nullptr;
+    std::atomic<float>* pFlowMode_ = nullptr;   // Off / Relax / Sharpen
+    std::atomic<float>* pFlowRate_ = nullptr;
+    std::atomic<float>* pKick_ = nullptr;       // edge-triggered conformal kick
+    std::atomic<float>* pVoiceMode_ = nullptr;  // Snapshot / Global
+    std::atomic<float>* pBow_ = nullptr;
 
     juce::SmoothedValue<float> gainSmoothed_;
 

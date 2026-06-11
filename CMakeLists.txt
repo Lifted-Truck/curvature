@@ -34,6 +34,7 @@ add_library(curv_core STATIC
     src/geometry/Presets.cpp
     src/geometry/Laplacian.cpp
     src/geometry/EigenSolver.cpp
+    src/geometry/RicciFlow.cpp
     src/engine/GeometryService.cpp)
 target_include_directories(curv_core PUBLIC
     ${eigen_SOURCE_DIR}
@@ -51,11 +52,15 @@ endif()
 add_executable(render_offline tools/render_offline.cpp)
 target_link_libraries(render_offline PRIVATE curv_core)
 
+add_executable(flow_soak tools/flow_soak.cpp)
+target_link_libraries(flow_soak PRIVATE curv_core)
+
 # ---------------------------------------------------------------------- tests
 enable_testing()
 add_executable(curv_tests
     tests/geometry_test.cpp
-    tests/engine_test.cpp)
+    tests/engine_test.cpp
+    tests/flow_test.cpp)
 target_link_libraries(curv_tests PRIVATE curv_core Catch2::Catch2WithMain)
 target_compile_definitions(curv_tests PRIVATE
     CURV_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
