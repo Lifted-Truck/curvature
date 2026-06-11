@@ -43,6 +43,7 @@ If claims 1–2 fail at Phase 0, the project pivots or stops cheaply.
 - Adrien, J.-M. (1991). Modal synthesis; IRCAM **Modalys**. — Modal banks driven by *physical* object models. We differ in (a) non-realizable abstract manifolds, (b) PDE flow as modulation, (c) topology as patch taxonomy.
 - Mathews, M., et al. — Scanned synthesis. Closest in spirit (a slowly evolving dynamical system scanned at audio rate) but evolves a *wavetable*, not an operator spectrum; no geometric attractor structure.
 - Hiller/Ruiz, Karplus–Strong, banded waveguides (Essl/Cook) — physical-modeling lineage; cite to position, not to borrow.
+- Beatsurfing **RANDOM** (2024) — nearest *commercial* relative in presentation: tactile evolving 3D object ("MATTER") as the performance surface. But its engine is 8 modulated delay lines + feedback (waveguide family) with neural-net morphing between presets, and the 3D blob *visualizes* the parameters rather than generating the sound. curvsynth reverses the causality: the geometry is the oscillator, and partial coherence is structural (one evolving operator), not learned.
 
 ### Libraries
 - **JUCE 8.x** (GPL/commercial) — plugin framework, `juce::dsp` for the resonator bank.
