@@ -19,6 +19,8 @@ struct DampingParams {
     float t60 = 5.0f;          // seconds, global
     float tilt = 0.7f;         // decay_k = t60 * (f_1/f_k)^tilt; may be negative
     float releaseT60 = 0.25f;  // after note-off
+    float comb = 0.0f;         // 0..1: every other mode's T60 collapses —
+                               // selective absorption no material has
 };
 
 class ModalVoice {
@@ -79,6 +81,9 @@ public:
 
     // sustained stochastic excitation (crude bow; refined by ear Phase 2+)
     void setBow(float amount) { bow_ = amount; }
+
+    // pitch wheel: multiplicative factor on all mode frequencies
+    void setPitchBend(float factor) { bend_ = factor; }
 
     // add this voice into out[0..n)
     void renderAdd(float* out, int n)
@@ -151,9 +156,13 @@ private:
             float t60 = releasing_
                 ? std::min(damping_.releaseT60, damping_.t60)
                 : damping_.t60 * std::pow(f1_ / freq_[m], damping_.tilt);
+            if ((m & 1) != 0)
+                t60 *= 1.0f - 0.97f * damping_.comb;
             t60 = std::max(t60, 1e-3f);
             const float r = std::exp(-lnK / (t60 * static_cast<float>(sr_)));
-            const float w = 2.0f * static_cast<float>(M_PI) * freq_[m] / static_cast<float>(sr_);
+            const float w = 2.0f * static_cast<float>(M_PI)
+                            * std::min(freq_[m] * bend_, static_cast<float>(0.45 * sr_))
+                            / static_cast<float>(sr_);
             const float targetRc = r * std::cos(w);
             const float targetRs = r * std::sin(w);
             if (immediate) {
@@ -178,6 +187,7 @@ private:
     int samplesUntilControl_ = 0;
     float f1_ = 1.0f;
     float bow_ = 0.0f;
+    float bend_ = 1.0f;
     uint32_t rng_ = 1;
     const SpectrumFrame* globalFrame_ = nullptr;
     DampingParams damping_;

@@ -1,15 +1,36 @@
 # Project status
 
-**Phase 2 — COMPLETE (2026-06-10). Holding at CHECKPOINT 2: the big one.**
+**Phase 3 (run 1) — COMPLETE (2026-06-11). Holding at CHECKPOINT 3.**
 
-The question on the table: **does flow sound like phrasing?** Play the plugin
-in Live — Kick + Relax while holding a chord, Sharpen mid-phrase, Flow Rate
-as a performance control. Offline previews: `renders/checkpoint2/`.
+Checkpoint history: CHECKPOINT 0 passed (genus taxonomy + drift coherence;
+aesthetic direction = implausible/"metaphysical" objects). CHECKPOINT 1
+passed ("It's working!"). CHECKPOINT 2 passed ("working properly" — and the
+in-chat flow visualizer was "extremely helpful", which set this run's
+priorities).
 
-Checkpoint history: CHECKPOINT 0 passed (genus taxonomy + drift coherence by
-ear; aesthetic direction = implausible/"metaphysical" objects, push beyond
-mild inversions). CHECKPOINT 1 passed ("It's working!" — loads and plays in
-Live 12.4.5b3).
+## Phase 3 run 1: legibility + local gesture
+
+- **In-plugin visualizer** (Phase 4 pulled forward on Julian's feedback):
+  custom editor replaces the generic one. Left: manifold with live curvature
+  heatmap (coral above target / teal below), conformal bulge, drag-to-rotate,
+  **click the surface to set the strike point**. Right: scrolling partial-
+  ratio traces + curvature error readout + full parameter panel. 30 Hz
+  software rendering; geometry state arrives via a second wait-free triple
+  buffer (`VizBus`), editor/message thread is sole consumer.
+- **Press** param: continuous localized curvature injection at the strike
+  vertex (BFS-bump profile, clamps apply) — a localized SHARPEN that grows a
+  resonant deformation under your finger; Relax heals it. Visible live in
+  the editor.
+- **Damp Comb** param: every other mode's T60 collapses — the selective-
+  absorption implausible material from checkpoint 0, now performable.
+- **Pitch bend**: +/-2 semitones, whole spectrum rigidly.
+
+## Phase 3 run 1 gates — all pass
+
+- Catch2 suite (14 cases; new: press localization + heal-by-relax): pass
+- pluginval strictness 10 (includes editor open/close): SUCCESS
+- C++ FFT oracle: 14 partials within 1 cent (worst 0.000)
+- ASan+UBSan suite: clean
 
 ## What's new in Phase 2
 
@@ -53,9 +74,17 @@ Live 12.4.5b3).
   per kick so each one is a different bump pattern.
 - Bow gain scales with amount²; injection at 750 Hz control rate.
 
-## Next (pending checkpoint verdict)
+## CHECKPOINT 3 — what Julian checks (in Live)
 
-Phase 3 candidates, ordered by Julian's Phase-2 feedback: local curvature
-injection (pressure gesture), MPE, strike-point-per-note, surgery/voice
-splitting, OBJ import, deeper implausibility features (metric morph targets,
-per-mode damping masks as params). Phase 4: visualization UI.
+1. The editor: does the manifold view make the instrument legible while
+   playing? Click-to-strike workflow; rotate during flow.
+2. Press as a gesture (automate it or ride it): localized bump -> localized
+   spectral change, healed by Relax.
+3. Damp Comb sweep on genus-2; pitch bend feel.
+
+## Remaining Phase 3 candidates (next runs, order by feedback)
+
+MPE, strike-point-per-note, metric-morph targets as a parameter,
+surgery/voice-splitting (stretch), OBJ import UX. Phase 4 polish: nicer
+shading, spectrum labels in Hz, curvature-injection by clicking with a
+modifier key.

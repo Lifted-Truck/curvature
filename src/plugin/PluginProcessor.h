@@ -4,6 +4,7 @@
 
 #include "../engine/GeometryService.h"
 #include "../engine/SpectrumBus.h"
+#include "../engine/VizFrame.h"
 #include "../engine/VoiceManager.h"
 
 namespace curv {
@@ -38,6 +39,8 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    VizBus& vizBus() { return vizBus_; }
+
 private:
     void run() override;  // geometry thread
 
@@ -45,6 +48,7 @@ private:
 
     GeometryService geometry_;        // geometry thread only (after construction)
     SpectrumBus bus_;
+    VizBus vizBus_;
     VoiceManager voices_;
     SpectrumFrame currentFrame_;      // audio thread copy
 
@@ -61,6 +65,8 @@ private:
     std::atomic<float>* pKick_ = nullptr;       // edge-triggered conformal kick
     std::atomic<float>* pVoiceMode_ = nullptr;  // Snapshot / Global
     std::atomic<float>* pBow_ = nullptr;
+    std::atomic<float>* pPress_ = nullptr;      // localized curvature injection
+    std::atomic<float>* pComb_ = nullptr;
 
     juce::SmoothedValue<float> gainSmoothed_;
 

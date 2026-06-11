@@ -88,7 +88,9 @@ if(CURV_BUILD_PLUGIN)
         NEEDS_MIDI_INPUT TRUE
         COPY_PLUGIN_AFTER_BUILD TRUE)
 
-    target_sources(curvsynth_plugin PRIVATE src/plugin/PluginProcessor.cpp)
+    target_sources(curvsynth_plugin PRIVATE
+        src/plugin/PluginProcessor.cpp
+        src/plugin/PluginEditor.cpp)
     target_link_libraries(curvsynth_plugin
         PRIVATE curv_core CurvAssets juce::juce_audio_utils
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags)

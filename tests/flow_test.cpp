@@ -66,6 +66,29 @@ TEST_CASE("eigenvalue trajectories continuous through fast path and re-solves")
     }
 }
 
+TEST_CASE("press gesture: localized curvature injection, healed by relax")
+{
+    auto mesh = makeIcosphere(3);
+    RicciFlow flow(mesh);
+    const int vtx = 100;
+    for (int i = 0; i < 40; ++i)
+        flow.press(vtx, 2.0, 0.05);
+
+    const Eigen::VectorXd bump = flow.logRadii() - flow.logRadiiBase();
+    REQUIRE(bump[vtx] > 0.5);                              // bump grew where pressed
+    REQUIRE(bump[vtx] == bump.maxCoeff());                 // and is largest there
+    int far = 0;
+    for (int i = 0; i < mesh.numVertices(); ++i)
+        if (bump[i] < 0.05 * bump[vtx])
+            ++far;
+    REQUIRE(far > mesh.numVertices() / 2);                 // localized, not global
+
+    double err = flow.curvatureError();
+    for (int i = 0; i < 400; ++i)
+        flow.step(0.3, +1.0);
+    REQUIRE(flow.curvatureError() < 0.2 * err);            // relax heals the press
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;

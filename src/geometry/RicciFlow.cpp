@@ -123,6 +123,39 @@ double RicciFlow::step(double dt, double direction)
     return 0.0;
 }
 
+void RicciFlow::press(int vertex, double amount, double dt)
+{
+    if (vertex != pressVertex_) {
+        // BFS graph distance from the pressed vertex; bump = exp(-(d/2.2)^2)
+        const int n = mesh_->numVertices();
+        std::vector<int> dist((size_t) n, -1);
+        std::vector<std::vector<int>> adj((size_t) n);
+        for (const auto& e : edges_) {
+            adj[(size_t) e[0]].push_back(e[1]);
+            adj[(size_t) e[1]].push_back(e[0]);
+        }
+        std::vector<int> queue { vertex };
+        dist[(size_t) vertex] = 0;
+        for (size_t qi = 0; qi < queue.size(); ++qi)
+            for (int nb : adj[(size_t) queue[qi]])
+                if (dist[(size_t) nb] < 0) {
+                    dist[(size_t) nb] = dist[(size_t) queue[qi]] + 1;
+                    queue.push_back(nb);
+                }
+        pressProfile_.resize(n);
+        for (int i = 0; i < n; ++i) {
+            const double d = dist[(size_t) i] / 2.2;
+            pressProfile_[i] = std::exp(-d * d);
+        }
+        pressVertex_ = vertex;
+    }
+
+    Eigen::VectorXd uNew = u_ + (amount * dt) * pressProfile_;
+    uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
+    if (isValid(uNew))
+        u_ = std::move(uNew);
+}
+
 void RicciFlow::perturb(double amplitude, unsigned seed)
 {
     const int n = mesh_->numVertices();

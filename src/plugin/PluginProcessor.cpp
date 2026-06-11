@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include "BinaryData.h"
+#include "PluginEditor.h"
 
 namespace curv {
 
@@ -26,6 +27,8 @@ CurvSynthProcessor::CurvSynthProcessor()
     pKick_ = apvts.getRawParameterValue("kick");
     pVoiceMode_ = apvts.getRawParameterValue("voicemode");
     pBow_ = apvts.getRawParameterValue("bow");
+    pPress_ = apvts.getRawParameterValue("press");
+    pComb_ = apvts.getRawParameterValue("comb");
 
     startThread();
 }
@@ -70,6 +73,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
         "voicemode", "Voices", juce::StringArray { "Snapshot", "Global Flow" }, 1));
     layout.add(std::make_unique<P>("bow", "Bow",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // Phase 3: press = localized curvature injection at the strike point
+    // (a bump grows under your finger; Relax heals it)
+    layout.add(std::make_unique<P>("press", "Press",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // comb = selective absorption: every other mode's decay collapses
+    layout.add(std::make_unique<P>("comb", "Damp Comb",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     return layout;
 }
 
@@ -113,24 +123,33 @@ void CurvSynthProcessor::run()
         }
         lastKick = kick;
 
+        const float press = pPress_->load();
+        if (press > 0.001f) {
+            geometry_.flowPress(strike, 2.5 * press, 0.05);
+            flowSinceResolve += 0.05;
+            publish = true;
+        }
+
         if (flowMode != 0 && flowRate > 0.0f) {
             const double dt = kMaxDt * flowRate * flowRate;
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
-            if (flowSinceResolve >= kResolveFlowTime) {
-                geometry_.resolve();
-                flowSinceResolve = 0.0;
-            }
             publish = true;
+        }
+        if (flowSinceResolve >= kResolveFlowTime) {
+            geometry_.resolve();
+            flowSinceResolve = 0.0;
         }
 
         if (publish) {
             geometry_.fillFrame(bus_.beginWrite(), modes, strike);
             bus_.publish();
+            geometry_.fillVizFrame(vizBus_.beginWrite(), modes, strike, manifold);
+            vizBus_.publish();
             lastManifold = manifold;
             lastModes = modes;
             lastStrike = strike;
         }
-        wait(kGeometryPollMs >> (flowMode != 0 ? 1 : 0));  // 25 ms while flowing
+        wait(kGeometryPollMs >> ((flowMode != 0 || press > 0.001f) ? 1 : 0));
     }
 }
 
@@ -154,7 +173,7 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         currentFrame_ = *latest;
     const bool haveSpectrum = currentFrame_.numModes > 0 || latest != nullptr;
 
-    voices_.setDamping({ pT60_->load(), pTilt_->load(), pRelease_->load() });
+    voices_.setDamping({ pT60_->load(), pTilt_->load(), pRelease_->load(), pComb_->load() });
     voices_.setGlobalFrame(((int) pVoiceMode_->load() == 1 && currentFrame_.numModes > 0)
                                ? &currentFrame_ : nullptr);
     voices_.setBow(pBow_->load());
@@ -176,6 +195,9 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             voices_.noteOn(currentFrame_, msg.getNoteNumber(), msg.getFloatVelocity(), mallet);
         else if (msg.isNoteOff())
             voices_.noteOff(msg.getNoteNumber());
+        else if (msg.isPitchWheel())
+            voices_.setPitchBend(std::pow(2.0f,
+                (msg.getPitchWheelValue() - 8192) / 8192.0f * 2.0f / 12.0f));
         else if (msg.isAllNotesOff() || msg.isAllSoundOff())
             voices_.allNotesOff();
     }
@@ -209,7 +231,7 @@ void CurvSynthProcessor::setStateInformation(const void* data, int size)
 
 juce::AudioProcessorEditor* CurvSynthProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new CurvSynthEditor(*this);
 }
 
 } // namespace curv

@@ -27,7 +27,19 @@ public:
     // one Euler step; direction +1 = RELAX, -1 = SHARPEN; returns dt taken
     double step(double dt, double direction);
 
+    // press gesture: continuous localized curvature injection around a
+    // vertex (a localized SHARPEN — forward flow heals it on release).
+    // Profile is a smooth bump over graph distance; clamps still apply.
+    void press(int vertex, double amount, double dt);
+
     void reset() { u_ = u0_; }
+
+    const Eigen::VectorXd& logRadii() const { return u_; }
+    const Eigen::VectorXd& logRadiiBase() const { return u0_; }
+    Eigen::VectorXd curvatureDeviation() const
+    {
+        return curvatures(u_).array() - kTarget_;
+    }
 
     double curvatureError() const;
 
@@ -48,6 +60,9 @@ private:
     std::vector<std::array<int, 3>> faceEdge_;  // face corner -> edge index (opposite)
     Eigen::VectorXd invDist_;                   // per edge
     Eigen::VectorXd u0_, u_;
+
+    int pressVertex_ = -1;
+    Eigen::VectorXd pressProfile_;  // cached bump for the current press vertex
 };
 
 } // namespace curv
