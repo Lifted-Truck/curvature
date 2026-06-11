@@ -123,9 +123,9 @@ double RicciFlow::step(double dt, double direction)
     return 0.0;
 }
 
-void RicciFlow::press(int vertex, double amount, double dt)
+void RicciFlow::press(int vertex, double amount, double dt, double sigma)
 {
-    if (vertex != pressVertex_) {
+    if (vertex != pressVertex_ || sigma != pressSigma_) {
         // BFS graph distance from the pressed vertex; bump = exp(-(d/2.2)^2)
         const int n = mesh_->numVertices();
         std::vector<int> dist((size_t) n, -1);
@@ -144,7 +144,7 @@ void RicciFlow::press(int vertex, double amount, double dt)
                 }
         pressProfile_.resize(n);
         for (int i = 0; i < n; ++i) {
-            const double d = dist[(size_t) i] / 2.2;
+            const double d = dist[(size_t) i] / std::max(sigma, 0.3);
             pressProfile_[i] = std::exp(-d * d);
         }
         // mean-free: flow conserves total log-scale, so a net-positive press
@@ -153,12 +153,19 @@ void RicciFlow::press(int vertex, double amount, double dt)
         // everywhere else) and relax genuinely restores the base metric.
         pressProfile_.array() -= pressProfile_.mean();
         pressVertex_ = vertex;
+        pressSigma_ = sigma;
     }
 
-    Eigen::VectorXd uNew = u_ + (amount * dt) * pressProfile_;
-    uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
-    if (isValid(uNew))
-        u_ = std::move(uNew);
+    double scale = amount * dt;
+    for (int tries = 0; tries < 8; ++tries) {
+        Eigen::VectorXd uNew = u_ + scale * pressProfile_;
+        uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
+        if (isValid(uNew)) {
+            u_ = std::move(uNew);
+            return;
+        }
+        scale *= 0.5;
+    }
 }
 
 void RicciFlow::perturb(double amplitude, unsigned seed)

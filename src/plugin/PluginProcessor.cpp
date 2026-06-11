@@ -28,7 +28,9 @@ CurvSynthProcessor::CurvSynthProcessor()
     pVoiceMode_ = apvts.getRawParameterValue("voicemode");
     pBow_ = apvts.getRawParameterValue("bow");
     pPress_ = apvts.getRawParameterValue("press");
+    pPressSize_ = apvts.getRawParameterValue("presssize");
     pComb_ = apvts.getRawParameterValue("comb");
+    pImpulse_ = apvts.getRawParameterValue("impulse");
 
     startThread();
 }
@@ -77,9 +79,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // (a bump grows under your finger; Relax heals it)
     layout.add(std::make_unique<P>("press", "Press",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // press bump falloff radius: pointy dent .. broad swell
+    layout.add(std::make_unique<P>("presssize", "Press Size",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
     // comb = selective absorption: every other mode's decay collapses
     layout.add(std::make_unique<P>("comb", "Damp Comb",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // mallet impulse level, independent of bow (0 + bow = purely bowed)
+    layout.add(std::make_unique<P>("impulse", "Impulse",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
     return layout;
 }
 
@@ -125,12 +133,20 @@ void CurvSynthProcessor::run()
 
         const float press = pPress_->load();
         if (press > 0.001f) {
-            geometry_.flowPress(strike, 2.5 * press, 0.05);
+            const double sigma = 0.8 + 5.2 * (double) pPressSize_->load();
+            geometry_.flowPress(strike, 2.5 * press, 0.05, sigma);
             flowSinceResolve += 0.05;
             publish = true;
         }
 
         if (flowMode != 0 && flowRate > 0.0f) {
+            // reverse flow amplifies curvature deviation — but uniform
+            // curvature is an exact fixed point, so SHARPEN from the base
+            // metric would sit still forever. Seed a tiny symmetry-breaking
+            // perturbation when engaging near equilibrium (reverse
+            // diffusion amplifying noise, which is what it physically is).
+            if (flowMode == 2 && geometry_.curvatureError() < 0.01)
+                geometry_.flowKick(0.05, kickSeed++);
             const double dt = kMaxDt * flowRate * flowRate;
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
             publish = true;
@@ -177,6 +193,7 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     voices_.setGlobalFrame(((int) pVoiceMode_->load() == 1 && currentFrame_.numModes > 0)
                                ? &currentFrame_ : nullptr);
     voices_.setBow(pBow_->load());
+    voices_.setImpulse(pImpulse_->load());
     const float mallet = pMallet_->load();
     gainSmoothed_.setTargetValue(juce::Decibels::decibelsToGain(pGain_->load()));
 

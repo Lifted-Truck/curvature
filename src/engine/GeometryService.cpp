@@ -63,9 +63,9 @@ double GeometryService::flowStep(double dt, double direction)
     return taken;
 }
 
-void GeometryService::flowPress(float strikeParam, double amount, double dt)
+void GeometryService::flowPress(float strikeParam, double amount, double dt, double sigma)
 {
-    flow_->press(strikeVertex(strikeParam), amount, dt);
+    flow_->press(strikeVertex(strikeParam), amount, dt, sigma);
     flow_->writeFaceLengths(mesh_);
     rayleighUpdate();
 }

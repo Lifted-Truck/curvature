@@ -53,9 +53,10 @@ public:
         rng_ = 0x9e3779b9u ^ (order * 2654435761u);
         bowAge_ = 0;
 
-        // bow is an alternative excitation, not a layer: it crossfades the
-        // mallet impulse out and swells in as sustained energy instead
-        const float impulseGain = 1.0f - 0.9f * bow_;
+        // impulse (mallet) and bow are independent excitation levels:
+        // impulse 1 / bow 0 = struck, impulse 0 / bow 1 = purely bowed,
+        // both up = struck note with sustained bowing underneath
+        const float impulseGain = impulse_;
 
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
@@ -86,6 +87,9 @@ public:
 
     // sustained stochastic excitation (crude bow; refined by ear Phase 2+)
     void setBow(float amount) { bow_ = amount; }
+
+    // mallet impulse level at note-on (independent of bow)
+    void setImpulse(float level) { impulse_ = level; }
 
     // pitch wheel: multiplicative factor on all mode frequencies
     void setPitchBend(float factor) { bend_ = factor; }
@@ -196,6 +200,7 @@ private:
     int samplesUntilControl_ = 0;
     float f1_ = 1.0f;
     float bow_ = 0.0f;
+    float impulse_ = 1.0f;
     float bend_ = 1.0f;
     int bowAge_ = 0;
     uint32_t rng_ = 1;

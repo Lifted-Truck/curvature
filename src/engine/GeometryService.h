@@ -28,8 +28,9 @@ public:
     // one flow step (+1 RELAX, -1 SHARPEN) + fast-path eigenvalue update;
     // returns dt actually taken
     double flowStep(double dt, double direction);
-    // press gesture: localized curvature injection at the strike vertex
-    void flowPress(float strikeParam, double amount, double dt);
+    // press gesture: localized curvature injection at the strike vertex;
+    // sigma = falloff radius in graph hops (pointy ~0.8 .. broad ~6)
+    void flowPress(float strikeParam, double amount, double dt, double sigma);
     // editor snapshot (geometry thread)
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;

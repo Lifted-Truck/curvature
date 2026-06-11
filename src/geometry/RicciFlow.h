@@ -29,8 +29,11 @@ public:
 
     // press gesture: continuous localized curvature injection around a
     // vertex (a localized SHARPEN — forward flow heals it on release).
-    // Profile is a smooth bump over graph distance; clamps still apply.
-    void press(int vertex, double amount, double dt);
+    // Profile is a smooth mean-free bump over graph distance with falloff
+    // radius sigma (hops); clamps still apply, and the amount halves until
+    // the metric accepts it (a stressed metric takes a smaller press, never
+    // silently none).
+    void press(int vertex, double amount, double dt, double sigma = 2.2);
 
     void reset() { u_ = u0_; }
 
@@ -62,7 +65,8 @@ private:
     Eigen::VectorXd u0_, u_;
 
     int pressVertex_ = -1;
-    Eigen::VectorXd pressProfile_;  // cached bump for the current press vertex
+    double pressSigma_ = -1.0;
+    Eigen::VectorXd pressProfile_;  // cached bump for current press vertex+sigma
 };
 
 } // namespace curv

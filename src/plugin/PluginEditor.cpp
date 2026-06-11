@@ -261,10 +261,12 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
 
     for (auto [id, name, suffix] : {
              std::tuple { "strike", "Strike", "" }, { "modes", "Modes", "" },
-             { "mallet", "Mallet", " Hz" }, { "t60", "T60", " s" },
+             { "mallet", "Mallet", " Hz" }, { "impulse", "Impulse", "" },
+             { "bow", "Bow", "" }, { "t60", "T60", " s" },
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
-             { "flowrate", "Flow Rate", "" }, { "press", "Press", "" },
-             { "bow", "Bow", "" }, { "comb", "Comb", "" }, { "gain", "Gain", " dB" } })
+             { "comb", "Comb", "" }, { "flowrate", "Flow Rate", "" },
+             { "press", "Press", "" }, { "presssize", "Press Size", "" },
+             { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
 
     setSize(960, 560);
@@ -315,8 +317,11 @@ juce::String CurvSynthEditor::buildStateReport() const
       << juce::String(raw("comb"), 2) << "\n"
       << "flow: " << choice("flowmode") << ", rate " << juce::String(rate, 2)
       << " (dt " << juce::String(0.25f * rate * rate, 4) << "/step @40Hz)\n"
-      << "voices: " << choice("voicemode") << ", bow " << juce::String(raw("bow"), 2)
-      << ", press " << juce::String(raw("press"), 2) << "\n"
+      << "voices: " << choice("voicemode") << ", impulse " << juce::String(raw("impulse"), 2)
+      << ", bow " << juce::String(raw("bow"), 2) << "\n"
+      << "press: " << juce::String(raw("press"), 2) << ", size "
+      << juce::String(raw("presssize"), 2) << " (sigma "
+      << juce::String(0.8f + 5.2f * raw("presssize"), 2) << " hops)\n"
       << "gain: " << juce::String(raw("gain"), 1) << " dB\n"
       << "live curvature error max|K-Kbar|: " << juce::String(manifold_.curvatureErr(), 4) << "\n";
     return s;

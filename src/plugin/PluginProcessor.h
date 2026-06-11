@@ -66,7 +66,9 @@ private:
     std::atomic<float>* pVoiceMode_ = nullptr;  // Snapshot / Global
     std::atomic<float>* pBow_ = nullptr;
     std::atomic<float>* pPress_ = nullptr;      // localized curvature injection
+    std::atomic<float>* pPressSize_ = nullptr;  // bump falloff radius
     std::atomic<float>* pComb_ = nullptr;
+    std::atomic<float>* pImpulse_ = nullptr;    // mallet level, independent of bow
 
     juce::SmoothedValue<float> gainSmoothed_;
 

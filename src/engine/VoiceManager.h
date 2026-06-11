@@ -42,6 +42,12 @@ public:
             v.setBow(amount);
     }
 
+    void setImpulse(float level)
+    {
+        for (auto& v : voices_)
+            v.setImpulse(level);
+    }
+
     void setPitchBend(float factor)
     {
         for (auto& v : voices_)
