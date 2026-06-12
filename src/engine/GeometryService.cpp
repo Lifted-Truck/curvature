@@ -39,8 +39,16 @@ void GeometryService::fillFrame(SpectrumFrame& frame, int numModes, float strike
     const double couplingScale = peak > 0.0 ? 1.0 / peak : 0.0;
 
     for (int m = 0; m < k; ++m) {
-        frame.ratio[m] = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
-        frame.coupling[m] = static_cast<float>(modes_.phi(vtx, m) * couplingScale);
+        float r = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
+        float c = static_cast<float>(modes_.phi(vtx, m) * couplingScale);
+        // a degenerate solve must never poison the audio thread: non-finite
+        // entries fall back to the previous mode's ratio / silence
+        if (!std::isfinite(r))
+            r = m > 0 ? frame.ratio[m - 1] : 1.0f;
+        if (!std::isfinite(c))
+            c = 0.0f;
+        frame.ratio[m] = r;
+        frame.coupling[m] = c;
     }
 }
 
@@ -92,6 +100,18 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
     const double lam1 = std::max(lambda_[0], 1e-12);
     for (int m = 0; m < k; ++m)
         frame.ratio[m] = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
+}
+
+void GeometryService::flowElastic(double rate)
+{
+    flow_->relaxToBase(rate);
+    flow_->writeFaceLengths(mesh_);
+    rayleighUpdate();
+}
+
+double GeometryService::metricDeviation() const
+{
+    return (flow_->logRadii() - flow_->logRadiiBase()).cwiseAbs().maxCoeff();
 }
 
 void GeometryService::flowReset()

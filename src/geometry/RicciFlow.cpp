@@ -123,6 +123,19 @@ double RicciFlow::step(double dt, double direction)
     return 0.0;
 }
 
+void RicciFlow::relaxToBase(double rate)
+{
+    double r = std::min(rate, 1.0);
+    for (int tries = 0; tries < 6; ++tries) {
+        Eigen::VectorXd uNew = u_ + r * (u0_ - u_);
+        if (isValid(uNew)) {
+            u_ = std::move(uNew);
+            return;
+        }
+        r *= 0.5;
+    }
+}
+
 void RicciFlow::press(int vertex, double amount, double dt, double sigma)
 {
     if (vertex != pressVertex_ || sigma != pressSigma_) {

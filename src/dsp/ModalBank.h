@@ -138,7 +138,9 @@ public:
         }
     }
 
-    // call at block rate from the audio thread; cheap energy gate
+    // call at block rate from the audio thread; cheap energy gate. Also the
+    // NaN circuit-breaker: a non-finite state would otherwise stick forever
+    // (every later injection adds into NaN), reading as "MIDI stopped".
     void updateActivity()
     {
         if (!active_)
@@ -146,7 +148,7 @@ public:
         float energy = 0.0f;
         for (int m = 0; m < numModes_; ++m)
             energy += s_[m] * s_[m] + c_[m] * c_[m];
-        if (energy < 1e-10f)
+        if (energy < 1e-10f || !std::isfinite(energy))
             reset();
     }
 

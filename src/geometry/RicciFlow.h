@@ -37,6 +37,10 @@ public:
 
     void reset() { u_ = u0_; }
 
+    // elastic restoring step toward the base metric (the Memory control's
+    // engine: rate 0 = full patina, rate -> 1 = snap back)
+    void relaxToBase(double rate);
+
     const Eigen::VectorXd& logRadii() const { return u_; }
     const Eigen::VectorXd& logRadiiBase() const { return u0_; }
     Eigen::VectorXd curvatureDeviation() const

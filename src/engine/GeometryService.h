@@ -35,6 +35,9 @@ public:
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;
     void flowReset();
+    // elastic restoring step toward base (Memory < 1)
+    void flowElastic(double rate);
+    double metricDeviation() const;  // max |u - u0|
     // scheduled full eigensolve, mode-matched to the previous basis so
     // frame-to-frame trajectories stay continuous through the re-solve
     void resolve();

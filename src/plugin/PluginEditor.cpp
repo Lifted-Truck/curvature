@@ -26,8 +26,11 @@ ManifoldView::ManifoldView(CurvSynthProcessor& proc) : proc_(proc)
 
 void ManifoldView::timerCallback()
 {
+    // two views share this bus; only one claims each fresh flag, so copy
+    // the latest frame unconditionally or the other view goes stale
     const VizFrame* latest = nullptr;
-    if (proc_.vizBus().readLatest(&latest) && latest != nullptr)
+    proc_.vizBus().readLatest(&latest);
+    if (latest != nullptr && latest->frameId != frame_.frameId)
         frame_ = *latest;
     if (frame_.presetId >= 0)
         rebuildMeshIfNeeded(frame_.presetId);
@@ -297,7 +300,7 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
              { "comb", "Comb", "" }, { "flowrate", "Flow Rate", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
-             { "gain", "Gain", " dB" } })
+             { "memory", "Memory", "" }, { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
 
     setSize(960, 560);
@@ -352,7 +355,8 @@ juce::String CurvSynthEditor::buildStateReport() const
       << ", bow " << juce::String(raw("bow"), 2) << "\n"
       << "press: " << juce::String(raw("press"), 2) << ", size "
       << juce::String(raw("presssize"), 2) << " (sigma "
-      << juce::String(0.8f + 5.2f * raw("presssize"), 2) << " hops)\n"
+      << juce::String(0.8f + 5.2f * raw("presssize"), 2) << " hops), memory "
+      << juce::String(raw("memory"), 2) << "\n"
       << "gain: " << juce::String(raw("gain"), 1) << " dB\n"
       << "live curvature error max|K-Kbar|: " << juce::String(manifold_.curvatureErr(), 4) << "\n";
     return s;

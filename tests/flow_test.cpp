@@ -94,6 +94,22 @@ TEST_CASE("press gesture: localized curvature injection, healed by relax")
     REQUIRE(residual.cwiseAbs().maxCoeff() < 0.08);
 }
 
+TEST_CASE("elastic restoring (Memory < 1) heals any deformation to base")
+{
+    auto mesh = makeFlatTorus(24, 18, 1.0, 1.618);
+    RicciFlow flow(mesh);
+    flow.perturb(0.6, 5);
+    for (int i = 0; i < 30; ++i)
+        flow.press(50, 2.5, 0.05, 1.5);  // pointy press into the clamps
+
+    for (int i = 0; i < 400; ++i)
+        flow.relaxToBase(0.05);
+    const Eigen::VectorXd residual = flow.logRadii() - flow.logRadiiBase();
+    // unlike Ricci relax, the elastic force targets u0 directly, so even
+    // clamp-leaked scale comes back out
+    REQUIRE(residual.cwiseAbs().maxCoeff() < 1e-4);
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;

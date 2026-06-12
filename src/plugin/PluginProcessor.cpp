@@ -32,6 +32,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pPressSize_ = apvts.getRawParameterValue("presssize");
     pComb_ = apvts.getRawParameterValue("comb");
     pImpulse_ = apvts.getRawParameterValue("impulse");
+    pMemory_ = apvts.getRawParameterValue("memory");
 
     startThread();
 }
@@ -60,11 +61,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
                                    juce::NormalisableRange<float>(0.1f, 20.0f, 0.0f, 0.4f), 5.0f));
     // negative tilt = anti-acoustic decay (highs outlast lows) — intentional
     layout.add(std::make_unique<P>("tilt", "Damping Tilt",
-                                   juce::NormalisableRange<float>(-1.0f, 2.0f), 0.7f));
+                                   juce::NormalisableRange<float>(-1.0f, 2.0f), 0.85f));
     layout.add(std::make_unique<P>("release", "Release T60",
                                    juce::NormalisableRange<float>(0.05f, 8.0f, 0.0f, 0.5f), 0.3f));
     layout.add(std::make_unique<P>("gain", "Gain",
-                                   juce::NormalisableRange<float>(-36.0f, 6.0f), -6.0f));
+                                   juce::NormalisableRange<float>(-36.0f, 6.0f), -9.0f));
 
     // ---- Phase 2: flow as performance gesture ----
     layout.add(std::make_unique<juce::AudioParameterChoice>(
@@ -92,6 +93,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // mallet impulse level, independent of bow (0 + bow = purely bowed)
     layout.add(std::make_unique<P>("impulse", "Impulse",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
+    // memory: 1 = deformations are permanent (the object scars), 0 = fully
+    // elastic (springs back in ~0.3 s); default heals over ~10 s
+    layout.add(std::make_unique<P>("memory", "Memory",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.8f));
     return layout;
 }
 
@@ -116,6 +121,12 @@ void CurvSynthProcessor::run()
         const float kick = pKick_->load();
 
         bool publish = false;
+
+        // crash armor: an eigensolve failure on an extreme metric must never
+        // take down the host. Recover by forcing a preset reload (fresh base
+        // metric) on the next iteration — the object snaps back, audio and
+        // MIDI keep running.
+        try {
 
         if (manifold != lastManifold) {
             geometry_.loadPreset((PresetId) manifold,
@@ -164,6 +175,18 @@ void CurvSynthProcessor::run()
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
             publish = true;
         }
+        // Memory: elastic restoring force toward the base metric. 1 = full
+        // patina (deformations permanent), 0 = springs back in ~0.3 s.
+        const float memory = pMemory_->load();
+        bool elastic = false;
+        if (memory < 0.999f && geometry_.metricDeviation() > 1e-4) {
+            const double rate = 0.08 * (1.0 - memory) * (1.0 - memory);
+            geometry_.flowElastic(rate);
+            flowSinceResolve += rate;
+            elastic = true;
+            publish = true;
+        }
+
         if (flowSinceResolve >= kResolveFlowTime) {
             geometry_.resolve();
             flowSinceResolve = 0.0;
@@ -178,7 +201,13 @@ void CurvSynthProcessor::run()
             lastModes = modes;
             lastStrike = strike;
         }
-        wait(kGeometryPollMs >> ((flowMode != 0 || press > 0.001f) ? 1 : 0));
+
+        wait(kGeometryPollMs >> ((flowMode != 0 || press > 0.001f || elastic) ? 1 : 0));
+        } catch (...) {
+            lastManifold = -1;       // force reload + republish next iteration
+            flowSinceResolve = 0.0;
+            wait(100);
+        }
     }
 }
 

@@ -70,6 +70,7 @@ private:
     std::atomic<float>* pPressSize_ = nullptr;  // bump falloff radius
     std::atomic<float>* pComb_ = nullptr;
     std::atomic<float>* pImpulse_ = nullptr;    // mallet level, independent of bow
+    std::atomic<float>* pMemory_ = nullptr;     // 1 = full patina, 0 = elastic
 
     juce::SmoothedValue<float> gainSmoothed_;
 
