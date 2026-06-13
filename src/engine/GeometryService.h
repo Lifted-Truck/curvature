@@ -31,6 +31,10 @@ public:
     // press gesture: localized curvature injection at the strike vertex;
     // sigma = falloff radius in graph hops (pointy ~0.8 .. broad ~6)
     void flowPress(float strikeParam, double amount, double dt, double sigma);
+    // strike ripple: inject a propagating wave at the strike vertex, advance it
+    void rippleStrike(float strikeParam, double amount);
+    void rippleStep(double dt, double speed, double damp);
+    bool rippleActive() const { return flow_->rippleActive(); }
     // editor snapshot (geometry thread)
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;

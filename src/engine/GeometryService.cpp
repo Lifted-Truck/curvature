@@ -83,7 +83,9 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
 {
     const int nv = std::min(mesh_.numVertices(), kMaxVizVerts);
     const Eigen::VectorXd kDev = flow_->curvatureDeviation();
-    const Eigen::VectorXd uDev = flow_->logRadii() - flow_->logRadiiBase();
+    // include the transient ripple so the spreading wave is visible
+    const Eigen::VectorXd uDev = flow_->logRadii() - flow_->logRadiiBase()
+                                 + flow_->rippleField();
 
     frame.numVerts = nv;
     frame.presetId = presetId;
@@ -100,6 +102,20 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
     const double lam1 = std::max(lambda_[0], 1e-12);
     for (int m = 0; m < k; ++m)
         frame.ratio[m] = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
+}
+
+void GeometryService::rippleStrike(float strikeParam, double amount)
+{
+    flow_->rippleStrike(strikeVertex(strikeParam), amount);
+    flow_->writeFaceLengths(mesh_);
+    rayleighUpdate();
+}
+
+void GeometryService::rippleStep(double dt, double speed, double damp)
+{
+    flow_->rippleStep(dt, speed, damp);
+    flow_->writeFaceLengths(mesh_);
+    rayleighUpdate();
 }
 
 void GeometryService::flowElastic(double rate)

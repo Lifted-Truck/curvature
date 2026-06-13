@@ -37,6 +37,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pMemRate_ = apvts.getRawParameterValue("memrate");
     pWarp_ = apvts.getRawParameterValue("warp");
     pStrikeDeform_ = apvts.getRawParameterValue("strikedeform");
+    pStrikeRipple_ = apvts.getRawParameterValue("strikeripple");
 
     startThread();
 }
@@ -114,10 +115,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // >1 stretches into impossible spectra, <1 compresses toward a unison hum
     layout.add(std::make_unique<P>("warp", "Spectral Warp",
                                    juce::NormalisableRange<float>(0.2f, 2.5f), 1.0f));
-    // strike-responsive deformation: each note-on dents the manifold at the
-    // strike point, velocity-scaled — the performance reshapes the instrument
-    // (healed per Memory; at Memory = 1 the object scars from being played)
+    // strike-responsive deformation: each note-on dents the manifold inward
+    // at the strike point, velocity-scaled — the performance reshapes the
+    // instrument (healed per Memory; at Memory = 1 the object scars)
     layout.add(std::make_unique<P>("strikedeform", "Strike Deform",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // strike ripple: each note-on sends a transient wave across the surface
+    // that propagates and damps out (a shimmer after the hit)
+    layout.add(std::make_unique<P>("strikeripple", "Strike Ripple",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     return layout;
 }
@@ -186,15 +191,25 @@ void CurvSynthProcessor::run()
             publish = true;
         }
 
-        // strike-responsive deformation: drain note-on hits and dent the
-        // manifold at each strike point, velocity-scaled. A focused one-shot
-        // dent per hit; heals per Memory (permanent at Memory = 1).
+        // strike-responsive deformation: drain note-on hits. Each dents the
+        // manifold INWARD (negative press) at the strike point and/or kicks a
+        // propagating ripple, velocity-scaled. Dent heals per Memory; ripple
+        // damps out on its own.
         const float strikeDeform = pStrikeDeform_->load();
+        const float strikeRipple = pStrikeRipple_->load();
         StrikeEvent hit;
         for (int drained = 0; drained < 16 && strikes_.pop(hit); ++drained) {
-            geometry_.flowPress(hit.strikeParam,
-                                0.7 * strikeDeform * hit.velocity, 1.0, 1.8);
+            if (strikeDeform > 0.001f)
+                geometry_.flowPress(hit.strikeParam,
+                                    -0.7 * strikeDeform * hit.velocity, 1.0, 1.8);
+            if (strikeRipple > 0.001f)
+                geometry_.rippleStrike(hit.strikeParam, 0.4 * strikeRipple * hit.velocity);
             flowSinceResolve += 0.05;
+            publish = true;
+        }
+        // advance the ripple wave while it has energy (propagates + damps)
+        if (geometry_.rippleActive()) {
+            geometry_.rippleStep(0.03, 6.0, 2.0);
             publish = true;
         }
 
@@ -235,18 +250,23 @@ void CurvSynthProcessor::run()
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
             publish = true;
         }
-        // Memory: elastic restoring force toward the base metric for the
-        // Off/Relax/Sharpen modes (1 = deformations permanent, < 1 springs
-        // back at Memory Rate). Disabled in Manual mode — there the
-        // bidirectional servo owns the geometry position and Memory would
-        // fight it (the churn Julian hit earlier).
+        // Memory: elastic restoring force toward the base metric (1 =
+        // deformations permanent, < 1 springs back at Memory Rate). In Manual
+        // mode it's scaled by (1-sharpness)^2 so it heals presses/strike-dents
+        // at neutral sharpness but yields to the servo as you sharpen (full
+        // strength would fight a held sharp state — the churn from before).
         const float memory = pMemory_->load();
         const float memRate = pMemRate_->load();
+        float memWeight = 1.0f;
+        if (manualMode) {
+            const float sharp = pSharpness_->load();
+            memWeight = (1.0f - sharp) * (1.0f - sharp);
+        }
         bool elastic = false;
-        if (!manualMode && memory < 0.999f && memRate > 0.0f
+        if (memory < 0.999f && memRate > 0.0f && memWeight > 0.001f
             && geometry_.metricDeviation() > 1e-4) {
             const double rate = 0.9 * (double) (memRate * memRate)
-                                * (1.0 - memory) * (1.0 - memory);
+                                * (1.0 - memory) * (1.0 - memory) * memWeight;
             geometry_.flowElastic(rate);
             flowSinceResolve += rate;
             elastic = true;
@@ -268,8 +288,9 @@ void CurvSynthProcessor::run()
             lastStrike = strike;
         }
 
-        const bool busy = flowMode != 0 || std::abs(press) > 0.001f
-                          || elastic || strikeDeform > 0.001f;
+        const bool busy = flowMode != 0 || std::abs(press) > 0.001f || elastic
+                          || strikeDeform > 0.001f || strikeRipple > 0.001f
+                          || geometry_.rippleActive();
         wait(kGeometryPollMs >> (busy ? 1 : 0));
         } catch (...) {
             lastManifold = -1;       // force reload + republish next iteration
@@ -322,9 +343,9 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         if (msg.isNoteOn() && haveSpectrum && currentFrame_.numModes > 0) {
             voices_.noteOn(currentFrame_, msg.getNoteNumber(), msg.getFloatVelocity(), mallet);
             // strike-responsive deformation: hand the hit to the geometry
-            // thread (lock-free; never blocks audio). It dents the manifold
-            // at the strike point on its next pass.
-            if (pStrikeDeform_->load() > 0.001f)
+            // thread (lock-free; never blocks audio). It dents / ripples the
+            // manifold at the strike point on its next pass.
+            if (pStrikeDeform_->load() > 0.001f || pStrikeRipple_->load() > 0.001f)
                 strikes_.push({ pStrike_->load(), msg.getFloatVelocity() });
         }
         else if (msg.isNoteOff())

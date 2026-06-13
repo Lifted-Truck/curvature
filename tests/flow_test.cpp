@@ -169,6 +169,26 @@ TEST_CASE("manual servo invariant: RMS curvature is smooth and bidirectional")
     REQUIRE(rms < 0.3 * sharpened);       // smoothing walked it back down
 }
 
+TEST_CASE("ripple: a strike wave propagates outward then damps to rest")
+{
+    auto mesh = makeIcosphere(3);
+    RicciFlow flow(mesh);
+    REQUIRE_FALSE(flow.rippleActive());
+
+    flow.rippleStrike(100, 0.4);
+    REQUIRE(flow.rippleActive());           // energy injected
+
+    bool stayedFinite = true;
+    for (int i = 0; i < 2000; ++i) {
+        flow.rippleStep(0.03, 6.0, 2.0);
+        Mesh probe = mesh;
+        flow.writeFaceLengths(probe);        // must stay a valid metric throughout
+        if (!std::isfinite(flow.curvatureError())) { stayedFinite = false; break; }
+    }
+    REQUIRE(stayedFinite);
+    REQUIRE_FALSE(flow.rippleActive());      // damping returned it to rest
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;

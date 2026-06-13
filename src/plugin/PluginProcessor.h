@@ -78,6 +78,7 @@ private:
     std::atomic<float>* pMemRate_ = nullptr;    // patina-decay speed (own clock)
     std::atomic<float>* pWarp_ = nullptr;       // spectral dispersion exponent
     std::atomic<float>* pStrikeDeform_ = nullptr;  // how much each strike dents
+    std::atomic<float>* pStrikeRipple_ = nullptr;  // propagating wave per strike
 
     std::atomic<float> outputPeak_ { 0.0f };    // pre-saturator peak, for the meter
 

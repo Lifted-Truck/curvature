@@ -35,14 +35,23 @@ public:
     // silently none).
     void press(int vertex, double amount, double dt, double sigma = 2.2);
 
-    void reset() { u_ = u0_; }
+    void reset() { u_ = u0_; ripple_.setZero(); rippleVel_.setZero(); }
 
     // elastic restoring step toward the base metric (the Memory control's
     // engine: rate 0 = full patina, rate -> 1 = snap back)
     void relaxToBase(double rate);
 
+    // ---- ripple: a transient wave on the conformal factor, ON TOP of the
+    // (flow/press/memory-managed) base metric. A strike injects a localized
+    // displacement that propagates across the surface and damps out — heard
+    // as the spectrum shimmering after the hit, seen as a spreading ring.
+    void rippleStrike(int vertex, double amount);
+    void rippleStep(double dt, double speed, double damp);
+    bool rippleActive() const { return rippleEnergy_ > 1e-9; }
+
     const Eigen::VectorXd& logRadii() const { return u_; }
     const Eigen::VectorXd& logRadiiBase() const { return u0_; }
+    const Eigen::VectorXd& rippleField() const { return ripple_; }
     Eigen::VectorXd curvatureDeviation() const
     {
         return curvatures(u_).array() - kTarget_;
@@ -73,6 +82,9 @@ private:
     int pressVertex_ = -1;
     double pressSigma_ = -1.0;
     Eigen::VectorXd pressProfile_;  // cached bump for current press vertex+sigma
+
+    Eigen::VectorXd ripple_, rippleVel_;  // transient wave field + its velocity
+    double rippleEnergy_ = 0.0;
 };
 
 } // namespace curv

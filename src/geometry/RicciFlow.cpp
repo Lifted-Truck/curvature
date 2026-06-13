@@ -53,6 +53,9 @@ RicciFlow::RicciFlow(const Mesh& mesh, double uClamp)
         adjacency_[(size_t) e[0]].push_back(e[1]);
         adjacency_[(size_t) e[1]].push_back(e[0]);
     }
+
+    ripple_ = Eigen::VectorXd::Zero(n);
+    rippleVel_ = Eigen::VectorXd::Zero(n);
 }
 
 void RicciFlow::faceLengthsFor(const Eigen::VectorXd& u,
@@ -227,7 +230,67 @@ void RicciFlow::perturb(double amplitude, unsigned seed)
 
 void RicciFlow::writeFaceLengths(Mesh& mesh) const
 {
-    faceLengthsFor(u_, mesh.faceLengths);
+    // the eigensolver/curvature see the base metric plus the transient ripple
+    if (rippleEnergy_ > 1e-12)
+        faceLengthsFor(u_ + ripple_, mesh.faceLengths);
+    else
+        faceLengthsFor(u_, mesh.faceLengths);
+}
+
+void RicciFlow::rippleStrike(int vertex, double amount)
+{
+    // localized displacement bump (graph distance falloff, ~2 hops) that the
+    // wave step then propagates outward
+    const int n = mesh_->numVertices();
+    std::vector<int> dist((size_t) n, -1);
+    std::vector<int> queue { vertex };
+    dist[(size_t) vertex] = 0;
+    for (size_t qi = 0; qi < queue.size(); ++qi)
+        for (int nb : adjacency_[(size_t) queue[qi]])
+            if (dist[(size_t) nb] < 0) {
+                dist[(size_t) nb] = dist[(size_t) queue[qi]] + 1;
+                queue.push_back(nb);
+                if (dist[(size_t) nb] > 5)  // local injection only
+                    goto done;
+            }
+done:
+    // mean-free bump: the graph Laplacian's constant mode has no restoring
+    // force, so any DC component would persist forever (a permanent metric
+    // offset). Subtract the bump's mean so the wave fully returns to rest.
+    Eigen::VectorXd bump = Eigen::VectorXd::Zero(n);
+    for (int i = 0; i < n; ++i)
+        if (dist[(size_t) i] >= 0) {
+            const double d = dist[(size_t) i] / 2.0;
+            bump[i] = amount * std::exp(-d * d);
+        }
+    bump.array() -= bump.mean();
+    ripple_ += bump;
+    rippleEnergy_ = ripple_.squaredNorm() + rippleVel_.squaredNorm();
+}
+
+void RicciFlow::rippleStep(double dt, double speed, double damp)
+{
+    if (rippleEnergy_ <= 1e-12 && ripple_.squaredNorm() < 1e-18)
+        return;
+    const int n = mesh_->numVertices();
+    // wave equation on the graph: a = speed^2 * (neighbour avg - r) - damp*v
+    Eigen::VectorXd accel(n);
+    for (int i = 0; i < n; ++i) {
+        double s = 0.0;
+        for (int nb : adjacency_[(size_t) i])
+            s += ripple_[nb];
+        const double avg = adjacency_[(size_t) i].empty()
+                               ? ripple_[i] : s / (double) adjacency_[(size_t) i].size();
+        // weak spring toward zero (kSpring) gives even the DC mode a restoring
+        // force so the wave always decays fully to rest
+        accel[i] = speed * speed * (avg - ripple_[i]) - damp * rippleVel_[i]
+                   - 0.5 * ripple_[i];
+    }
+    rippleVel_ += dt * accel;
+    ripple_ += dt * rippleVel_;
+    // keep the transient bounded so u_ + ripple_ stays a valid metric
+    ripple_ = ripple_.cwiseMax(-0.6).cwiseMin(0.6);
+    rippleEnergy_ = ripple_.squaredNorm() + rippleVel_.squaredNorm();
 }
 
 } // namespace curv

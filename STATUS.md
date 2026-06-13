@@ -163,6 +163,24 @@ the instrument.
   subsequent notes.
 - Best heard in the visualizer: play and watch the surface dent under each hit.
 
+## Round 10 (2026-06-13) — strike dent direction, ripple, Memory in Manual
+
+- **Strike Deform is now an inward dent** (negative press), not a convex
+  bulge — matches "dent", and spectrally distinct (local shrink raises local
+  pitch). Renamed "Strike Dent" in the UI.
+- **Strike Ripple** (new param): each note-on injects a mean-free localized
+  displacement that propagates across the surface as a damped graph wave
+  (`RicciFlow::rippleStrike`/`rippleStep`) — a transient on top of the base
+  metric, folded into the eigensolve and the visualizer (visible spreading
+  ring). Weak spring toward zero so it always returns to rest (the DC mode
+  has no Laplacian restoring force otherwise — caught by a test). speed 6,
+  damp 2.0 defaults; clamped ±0.6 so u+ripple stays a valid metric.
+- **Memory now works in Manual mode**, scaled by (1-sharpness)^2: full at
+  neutral sharpness (heals presses/strike-dents), tapering to none as you
+  sharpen (so it doesn't fight a held sharp state).
+- gates: 20 Catch2 cases (+ripple return-to-rest, strike-queue FIFO/threaded),
+  pluginval 10, FFT oracle <1 cent, ASan + TSan clean.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

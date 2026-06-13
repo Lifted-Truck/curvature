@@ -311,7 +311,7 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "warp", "Spec Warp", "" }, { "comb", "Comb", "" },
              { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
-             { "strikedeform", "Strike Deform", "" },
+             { "strikedeform", "Strike Dent", "" }, { "strikeripple", "Strike Ripple", "" },
              { "memory", "Memory", "" }, { "memrate", "Mem Rate", "" },
              { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
@@ -385,7 +385,8 @@ juce::String CurvSynthEditor::buildStateReport() const
       << "press: " << juce::String(raw("press"), 2) << ", size "
       << juce::String(raw("presssize"), 2) << " (sigma "
       << juce::String(0.8f + 5.2f * raw("presssize"), 2) << " hops)\n"
-      << "strike deform: " << juce::String(raw("strikedeform"), 2)
+      << "strike dent: " << juce::String(raw("strikedeform"), 2)
+      << ", ripple " << juce::String(raw("strikeripple"), 2)
       << ", memory " << juce::String(raw("memory"), 2) << "\n"
       << "gain: " << juce::String(raw("gain"), 1) << " dB\n"
       << "live curvature error max|K-Kbar|: " << juce::String(manifold_.curvatureErr(), 4) << "\n";
