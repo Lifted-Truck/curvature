@@ -36,6 +36,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pMemory_ = apvts.getRawParameterValue("memory");
     pMemRate_ = apvts.getRawParameterValue("memrate");
     pWarp_ = apvts.getRawParameterValue("warp");
+    pStrikeDeform_ = apvts.getRawParameterValue("strikedeform");
 
     startThread();
 }
@@ -113,6 +114,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // >1 stretches into impossible spectra, <1 compresses toward a unison hum
     layout.add(std::make_unique<P>("warp", "Spectral Warp",
                                    juce::NormalisableRange<float>(0.2f, 2.5f), 1.0f));
+    // strike-responsive deformation: each note-on dents the manifold at the
+    // strike point, velocity-scaled — the performance reshapes the instrument
+    // (healed per Memory; at Memory = 1 the object scars from being played)
+    layout.add(std::make_unique<P>("strikedeform", "Strike Deform",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     return layout;
 }
 
@@ -176,6 +182,18 @@ void CurvSynthProcessor::run()
         if (std::abs(press) > 0.001f) {
             const double sigma = 0.8 + 5.2 * (double) pPressSize_->load();
             geometry_.flowPress(strike, 2.5 * press, 0.05, sigma);  // sign: + sharp, - smooth
+            flowSinceResolve += 0.05;
+            publish = true;
+        }
+
+        // strike-responsive deformation: drain note-on hits and dent the
+        // manifold at each strike point, velocity-scaled. A focused one-shot
+        // dent per hit; heals per Memory (permanent at Memory = 1).
+        const float strikeDeform = pStrikeDeform_->load();
+        StrikeEvent hit;
+        for (int drained = 0; drained < 16 && strikes_.pop(hit); ++drained) {
+            geometry_.flowPress(hit.strikeParam,
+                                0.7 * strikeDeform * hit.velocity, 1.0, 1.8);
             flowSinceResolve += 0.05;
             publish = true;
         }
@@ -250,7 +268,9 @@ void CurvSynthProcessor::run()
             lastStrike = strike;
         }
 
-        wait(kGeometryPollMs >> ((flowMode != 0 || std::abs(press) > 0.001f || elastic) ? 1 : 0));
+        const bool busy = flowMode != 0 || std::abs(press) > 0.001f
+                          || elastic || strikeDeform > 0.001f;
+        wait(kGeometryPollMs >> (busy ? 1 : 0));
         } catch (...) {
             lastManifold = -1;       // force reload + republish next iteration
             flowSinceResolve = 0.0;
@@ -299,8 +319,14 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             voices_.renderAdd(out + pos, at - pos);
             pos = at;
         }
-        if (msg.isNoteOn() && haveSpectrum && currentFrame_.numModes > 0)
+        if (msg.isNoteOn() && haveSpectrum && currentFrame_.numModes > 0) {
             voices_.noteOn(currentFrame_, msg.getNoteNumber(), msg.getFloatVelocity(), mallet);
+            // strike-responsive deformation: hand the hit to the geometry
+            // thread (lock-free; never blocks audio). It dents the manifold
+            // at the strike point on its next pass.
+            if (pStrikeDeform_->load() > 0.001f)
+                strikes_.push({ pStrike_->load(), msg.getFloatVelocity() });
+        }
         else if (msg.isNoteOff())
             voices_.noteOff(msg.getNoteNumber());
         else if (msg.isPitchWheel())

@@ -6,6 +6,7 @@
 
 #include "../src/dsp/ModalBank.h"
 #include "../src/engine/SpectrumBus.h"
+#include "../src/engine/StrikeQueue.h"
 #include "../src/engine/VoiceManager.h"
 
 using namespace curv;
@@ -92,6 +93,51 @@ TEST_CASE("voice manager: polyphony, stealing, note-off")
     vm.renderAdd(buf.data(), (int) buf.size());
     for (float x : buf)
         REQUIRE(x == 0.0f);
+}
+
+TEST_CASE("strike queue: SPSC delivers every event in order, drops when full")
+{
+    StrikeQueue<8> q;
+    StrikeEvent e;
+    REQUIRE_FALSE(q.pop(e));  // empty
+
+    for (int i = 0; i < 8; ++i)
+        REQUIRE(q.push({ (float) i, 1.0f }));
+    REQUIRE_FALSE(q.push({ 99.0f, 1.0f }));  // full -> dropped, never blocks
+
+    for (int i = 0; i < 8; ++i) {
+        REQUIRE(q.pop(e));
+        REQUIRE(e.strikeParam == (float) i);  // FIFO order preserved
+    }
+    REQUIRE_FALSE(q.pop(e));
+}
+
+TEST_CASE("strike queue: threaded producer/consumer loses nothing")
+{
+    StrikeQueue<64> q;
+    std::atomic<bool> done { false };
+    constexpr int N = 100000;
+
+    std::thread producer([&] {
+        for (int i = 0; i < N; ) {
+            if (q.push({ (float) i, 1.0f }))
+                ++i;  // retry on full (consumer will catch up)
+        }
+        done = true;
+    });
+
+    int received = 0;
+    StrikeEvent e;
+    float expected = 0.0f;
+    while (!done.load() || received < N) {
+        if (q.pop(e)) {
+            REQUIRE(e.strikeParam == expected);  // strict FIFO, nothing lost
+            expected += 1.0f;
+            ++received;
+        }
+    }
+    producer.join();
+    REQUIRE(received == N);
 }
 
 TEST_CASE("spectrum bus: SPSC stress, consumer always sees a coherent frame")

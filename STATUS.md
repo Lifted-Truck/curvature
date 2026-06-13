@@ -147,6 +147,22 @@ modulation + keytracking + MPE to help bridge.
   ~0.6-0.78 across presets, so it settles instead of chasing). Memory
   disabled in Manual (the bidirectional servo owns position).
 
+## Round 9 (2026-06-13) — strike-responsive deformation (CHECKPOINT 3 passed)
+
+Julian's flagship roadmap idea, the thesis payoff: the performance reshapes
+the instrument.
+- **StrikeQueue** (`src/engine/StrikeQueue.h`): lock-free SPSC ring, audio
+  thread (note-on) -> geometry thread. Audio-thread safe (fixed storage, no
+  locks/alloc; full = drop). TSan-clean threaded test + FIFO test.
+- On note-on the audio thread pushes {strikeParam, velocity}; the geometry
+  thread drains and applies a focused velocity-scaled dent (flowPress, sigma
+  1.8) at the strike point. Heals per Memory — at Memory = 1 the object
+  scars from being played; with Memory < 1 dents fade between notes.
+- **Strike Deform** param (0..1, default 0 = off). Most alive in Global Flow
+  voice mode (ringing notes retune as the dent forms); in Snapshot it shapes
+  subsequent notes.
+- Best heard in the visualizer: play and watch the surface dent under each hit.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

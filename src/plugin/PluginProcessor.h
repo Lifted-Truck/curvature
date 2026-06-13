@@ -4,6 +4,7 @@
 
 #include "../engine/GeometryService.h"
 #include "../engine/SpectrumBus.h"
+#include "../engine/StrikeQueue.h"
 #include "../engine/VizFrame.h"
 #include "../engine/VoiceManager.h"
 
@@ -50,6 +51,7 @@ private:
     GeometryService geometry_;        // geometry thread only (after construction)
     SpectrumBus bus_;
     VizBus vizBus_;
+    StrikeQueue<64> strikes_;         // audio thread -> geometry thread
     VoiceManager voices_;
     SpectrumFrame currentFrame_;      // audio thread copy
 
@@ -75,6 +77,7 @@ private:
     std::atomic<float>* pMemory_ = nullptr;     // 1 = full patina, 0 = elastic
     std::atomic<float>* pMemRate_ = nullptr;    // patina-decay speed (own clock)
     std::atomic<float>* pWarp_ = nullptr;       // spectral dispersion exponent
+    std::atomic<float>* pStrikeDeform_ = nullptr;  // how much each strike dents
 
     std::atomic<float> outputPeak_ { 0.0f };    // pre-saturator peak, for the meter
 
