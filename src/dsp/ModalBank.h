@@ -36,7 +36,7 @@ public:
         bowAge_ = 0;
         bowNoise_ = 0.0f;
         for (int m = 0; m < kMaxModes; ++m)
-            s_[m] = c_[m] = exc_[m] = bowWeight_[m] = 0.0f;
+            s_[m] = c_[m] = exc_[m] = bowWeight_[m] = ratio_[m] = 0.0f;
     }
 
     bool isActive() const { return active_; }
@@ -78,6 +78,7 @@ public:
             const float f = noteHz * warped;
             if (f >= nyquistGuard)
                 break;  // ratios ascend; everything after is out too
+            ratio_[k] = frame.ratio[m];  // base (unwarped) ratio for live warp
             freq_[k] = f;
             const float mallet = 1.0f / (1.0f + std::pow(f / malletCutoff, 4.0f));
             exc_[k] = velocity * frame.coupling[m] * mallet;
@@ -192,15 +193,23 @@ public:
 private:
     void updateCoefficients(bool immediate)
     {
-        // global-flow retune: pull mode frequencies from the live spectrum
-        // before computing rotation targets; the linear per-sample ramps
-        // below carry the sweep (coupled form stays stable under it)
-        if (globalFrame_ != nullptr) {
+        // retune mode frequencies at control rate so both global flow AND
+        // spectral warp are live (sweepable while notes ring) instead of
+        // frozen at note-on. Base ratio comes from the evolving spectrum in
+        // global mode, else the snapshot taken at note-on; warp bends it.
+        // The per-sample ramps below carry the sweep (coupled form stays
+        // stable under continuous frequency change).
+        {
             const float nyquistGuard = static_cast<float>(0.45 * sr_);
-            const int k = std::min(numModes_, globalFrame_->numModes);
-            for (int m = 0; m < k; ++m)
-                freq_[m] = std::min(noteHz_ * globalFrame_->ratio[m], nyquistGuard);
-            f1_ = freq_[0];
+            const bool global = globalFrame_ != nullptr;
+            const int gk = global ? std::min(numModes_, globalFrame_->numModes) : 0;
+            const bool unitWarp = warp_ == 1.0f;
+            for (int m = 0; m < numModes_; ++m) {
+                const float base = (global && m < gk) ? globalFrame_->ratio[m] : ratio_[m];
+                const float warped = unitWarp ? base : std::pow(base, warp_);
+                freq_[m] = std::min(noteHz_ * warped, nyquistGuard);
+            }
+            f1_ = freq_[0] > 0.0f ? freq_[0] : noteHz_;
         }
 
         const float lnK = std::log(1000.0f);
@@ -254,6 +263,7 @@ private:
     DampingParams damping_;
 
     float freq_[kMaxModes] = {};
+    float ratio_[kMaxModes] = {};  // base (unwarped) f_k/f_1 captured at note-on
     float exc_[kMaxModes] = {};
     float bowWeight_[kMaxModes] = {};
     float s_[kMaxModes] = {};
