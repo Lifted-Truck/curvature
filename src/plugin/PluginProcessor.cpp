@@ -180,24 +180,32 @@ void CurvSynthProcessor::run()
             publish = true;
         }
 
-        if (flowMode == 3 && flowRate > 0.0f) {
-            // Manual: servo curvature error onto the Sharpness target.
-            // Position control (like a cutoff knob) rather than rate control.
-            // The target is slewed and the deadband has hysteresis so the
-            // servo settles instead of hunting (jitter/visual wobble).
+        bool manualMode = (flowMode == 3);
+        if (manualMode) {
+            // Manual: position control on *metric deviation* ||u - u0||, NOT
+            // on curvature error. Deviation is the monotone coordinate of the
+            // flow — Sharpen always grows it, elastic relax always shrinks it
+            // — so the knob can't reverse on itself, and the target is capped
+            // below the clamp so it's actually reachable (no endless chase /
+            // jitter at max). Chase speed is fixed (knob feels direct), not
+            // tied to Flow Rate.
             const float sharp = pSharpness_->load();
-            const double rawTarget = 3.0 * sharp * sharp;
-            manualTarget += 0.15 * (rawTarget - manualTarget);  // slew toward the knob
-            const double kErr = geometry_.curvatureError();
-            const double servoErr = manualTarget - kErr;
-            const double band = manualSettled ? 0.06 : 0.02;    // hysteresis
-            if (std::abs(servoErr) > band) {
+            const double targetDev = 1.2 * sharp * sharp;   // < uClamp (1.5): reachable
+            manualTarget += 0.2 * (targetDev - manualTarget);  // light slew
+            const double dev = geometry_.metricDeviation();
+            const double err = manualTarget - dev;
+            const double band = manualSettled ? 0.05 : 0.015;  // hysteresis
+            if (std::abs(err) > band) {
                 manualSettled = false;
-                if (servoErr > 0 && kErr < 0.01)
-                    geometry_.flowKick(0.05, kickSeed++);  // symmetry-break seed
-                const double dt = kMaxDt * flowRate * flowRate
-                                  * std::min(1.0, std::abs(servoErr) / 0.3);
-                flowSinceResolve += geometry_.flowStep(dt, servoErr > 0 ? -1.0 : +1.0);
+                const double dt = kMaxDt * 0.2 * std::min(1.0, std::abs(err) / 0.3);
+                if (err > 0) {  // need more deformation: reverse flow (localizes)
+                    if (dev < 1e-3)
+                        geometry_.flowKick(0.05, kickSeed++);  // seed at equilibrium
+                    flowSinceResolve += geometry_.flowStep(dt, -1.0);
+                } else {        // too sharp: elastic relax toward base (monotone)
+                    geometry_.flowElastic(0.2 * std::min(1.0, std::abs(err) / 0.3));
+                    flowSinceResolve += dt;
+                }
                 publish = true;
             } else {
                 manualSettled = true;
@@ -221,7 +229,10 @@ void CurvSynthProcessor::run()
         const float memory = pMemory_->load();
         const float memRate = pMemRate_->load();
         bool elastic = false;
-        if (memory < 0.999f && memRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
+        // Manual mode IS a position control on deviation; Memory's restoring
+        // force would fight it and cause perpetual re-sharpening churn.
+        if (!manualMode && memory < 0.999f && memRate > 0.0f
+            && geometry_.metricDeviation() > 1e-4) {
             const double rate = 0.9 * (double) (memRate * memRate)
                                 * (1.0 - memory) * (1.0 - memory);
             geometry_.flowElastic(rate);

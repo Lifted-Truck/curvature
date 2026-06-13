@@ -110,6 +110,36 @@ TEST_CASE("elastic restoring (Memory < 1) heals any deformation to base")
     REQUIRE(residual.cwiseAbs().maxCoeff() < 1e-4);
 }
 
+TEST_CASE("manual servo invariant: metric deviation is monotone under the flow")
+{
+    // The Manual-mode position control drives ||u - u0|| because it is the
+    // monotone coordinate of the flow: Sharpen grows it, elastic relax
+    // shrinks it. (Curvature error is NOT monotone — it's a max over
+    // vertices that jumps — which is why the servo can't drive on it.)
+    GeometryService geo;
+    geo.loadPreset(PresetId::Icosphere, nullptr, 0);
+    geo.flowKick(0.05, 1);  // symmetry-break seed
+
+    double dev = geo.metricDeviation();
+    bool grew = false;
+    for (int i = 0; i < 40; ++i) {
+        geo.flowStep(0.2, -1.0);  // Sharpen
+        const double d = geo.metricDeviation();
+        if (d > dev + 1e-6) grew = true;
+        REQUIRE(d >= dev - 1e-6);   // never decreases under Sharpen
+        dev = d;
+    }
+    REQUIRE(grew);                   // and it does increase
+
+    for (int i = 0; i < 200; ++i) {
+        geo.flowElastic(0.2);        // relax toward base
+        const double d = geo.metricDeviation();
+        REQUIRE(d <= dev + 1e-9);    // never increases under elastic relax
+        dev = d;
+    }
+    REQUIRE(dev < 1e-3);             // and converges back to base
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;
