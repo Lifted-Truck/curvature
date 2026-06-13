@@ -23,6 +23,8 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    void mouseWheelMove(const juce::MouseEvent& e,
+                        const juce::MouseWheelDetails& wheel) override;
 
     int numVerts() const { return frame_.numVerts; }
     float curvatureErr() const { return frame_.curvatureErr; }
@@ -38,6 +40,7 @@ private:
     std::vector<std::array<float, 3>> vertexNormals_;
     int meshPresetId_ = -1;
     float yaw_ = 0.6f, pitch_ = 0.25f;
+    float zoom_ = 1.0f;
     float meshExtent_ = 1.0f;
     int extentPresetId_ = -1;
     juce::Point<float> lastDrag_;

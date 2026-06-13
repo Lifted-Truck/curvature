@@ -24,6 +24,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pGain_ = apvts.getRawParameterValue("gain");
     pFlowMode_ = apvts.getRawParameterValue("flowmode");
     pFlowRate_ = apvts.getRawParameterValue("flowrate");
+    pSharpness_ = apvts.getRawParameterValue("sharpness");
     pKick_ = apvts.getRawParameterValue("kick");
     pVoiceMode_ = apvts.getRawParameterValue("voicemode");
     pBow_ = apvts.getRawParameterValue("bow");
@@ -69,9 +70,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
 
     // ---- Phase 2: flow as performance gesture ----
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        "flowmode", "Flow", juce::StringArray { "Off", "Relax", "Sharpen" }, 0));
+        "flowmode", "Flow", juce::StringArray { "Off", "Relax", "Sharpen", "Manual" }, 0));
+    // Flow Rate is the global geometry clock: flow steps, the Manual servo,
+    // and Memory's elastic restoring force all scale with it
     layout.add(std::make_unique<P>("flowrate", "Flow Rate",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
+    // Manual mode: position control — the slider sets a target curvature
+    // concentration and the flow servos toward it (smooth <-> sharp)
+    layout.add(std::make_unique<P>("sharpness", "Sharpness",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     layout.add(std::make_unique<juce::AudioParameterBool>("kick", "Kick (perturb metric)", false));
     // permanence is a feature (press leaves a trace via clamp saturation);
     // reset is the optional way back to the pristine object
@@ -163,7 +170,22 @@ void CurvSynthProcessor::run()
             publish = true;
         }
 
-        if (flowMode != 0 && flowRate > 0.0f) {
+        if (flowMode == 3 && flowRate > 0.0f) {
+            // Manual: servo curvature error onto the Sharpness target.
+            // Position control (like a cutoff knob) rather than rate control.
+            const float sharp = pSharpness_->load();
+            const double target = 3.0 * sharp * sharp;
+            const double kErr = geometry_.curvatureError();
+            const double servoErr = target - kErr;
+            if (std::abs(servoErr) > 0.03) {
+                if (servoErr > 0 && kErr < 0.01)
+                    geometry_.flowKick(0.05, kickSeed++);  // symmetry-break seed
+                const double dt = kMaxDt * flowRate * flowRate
+                                  * std::min(1.0, std::abs(servoErr) / 0.3);
+                flowSinceResolve += geometry_.flowStep(dt, servoErr > 0 ? -1.0 : +1.0);
+                publish = true;
+            }
+        } else if (flowMode != 0 && flowRate > 0.0f) {
             // reverse flow amplifies curvature deviation — but uniform
             // curvature is an exact fixed point, so SHARPEN from the base
             // metric would sit still forever. Seed a tiny symmetry-breaking
@@ -176,11 +198,14 @@ void CurvSynthProcessor::run()
             publish = true;
         }
         // Memory: elastic restoring force toward the base metric. 1 = full
-        // patina (deformations permanent), 0 = springs back in ~0.3 s.
+        // patina (deformations permanent), 0 = fully elastic. Runs on the
+        // same Flow Rate clock as Relax/Sharpen/Manual so the balance
+        // between flow and spring is rate-independent.
         const float memory = pMemory_->load();
         bool elastic = false;
-        if (memory < 0.999f && geometry_.metricDeviation() > 1e-4) {
-            const double rate = 0.08 * (1.0 - memory) * (1.0 - memory);
+        if (memory < 0.999f && flowRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
+            const double rate = 0.9 * (double) (flowRate * flowRate)
+                                * (1.0 - memory) * (1.0 - memory);
             geometry_.flowElastic(rate);
             flowSinceResolve += rate;
             elastic = true;

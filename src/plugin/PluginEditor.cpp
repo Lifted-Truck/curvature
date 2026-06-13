@@ -85,7 +85,7 @@ juce::Point<float> ManifoldView::project(int vi, float& depth) const
     const float cp = std::cos(pitch_), sp = std::sin(pitch_);
     const float x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
     const float y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
-    const float scale = 0.36f * std::min(getWidth(), getHeight());
+    const float scale = 0.36f * zoom_ * std::min(getWidth(), getHeight());
     // display embeddings are roughly unit-ish; tori/genus2 are wider, so
     // normalize by a per-preset fudge from the mesh extent
     depth = z2;
@@ -150,8 +150,15 @@ void ManifoldView::paint(juce::Graphics& g)
 
     g.setColour(juce::Colours::white.withAlpha(0.5f));
     g.setFont(12.0f);
-    g.drawText("drag to rotate - click to strike here - coral bumps / teal dents",
+    g.drawText("drag rotate - wheel zoom - click to strike - coral bumps / teal dents",
                getLocalBounds().removeFromBottom(18), juce::Justification::centred);
+}
+
+void ManifoldView::mouseWheelMove(const juce::MouseEvent&,
+                                  const juce::MouseWheelDetails& wheel)
+{
+    zoom_ = juce::jlimit(0.25f, 5.0f, zoom_ * std::exp(0.6f * wheel.deltaY));
+    repaint();
 }
 
 void ManifoldView::mouseDown(const juce::MouseEvent& e)
@@ -299,8 +306,9 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "bow", "Bow", "" }, { "t60", "T60", " s" },
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
              { "comb", "Comb", "" }, { "flowrate", "Flow Rate", "" },
-             { "press", "Press", "" }, { "presssize", "Press Size", "" },
-             { "memory", "Memory", "" }, { "gain", "Gain", " dB" } })
+             { "sharpness", "Sharpness", "" }, { "press", "Press", "" },
+             { "presssize", "Press Size", "" }, { "memory", "Memory", "" },
+             { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
 
     setSize(960, 560);
@@ -350,7 +358,8 @@ juce::String CurvSynthEditor::buildStateReport() const
       << ", release " << juce::String(raw("release"), 2) << " s, comb "
       << juce::String(raw("comb"), 2) << "\n"
       << "flow: " << choice("flowmode") << ", rate " << juce::String(rate, 2)
-      << " (dt " << juce::String(0.25f * rate * rate, 4) << "/step @40Hz)\n"
+      << " (dt " << juce::String(0.25f * rate * rate, 4) << "/step @40Hz), sharpness "
+      << juce::String(raw("sharpness"), 2) << "\n"
       << "voices: " << choice("voicemode") << ", impulse " << juce::String(raw("impulse"), 2)
       << ", bow " << juce::String(raw("bow"), 2) << "\n"
       << "press: " << juce::String(raw("press"), 2) << ", size "
