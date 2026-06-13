@@ -19,19 +19,11 @@ juce::Colour curvatureColour(float dev, float shade)
 
 // ------------------------------------------------------------ ManifoldView
 
-ManifoldView::ManifoldView(CurvSynthProcessor& proc) : proc_(proc)
-{
-    startTimerHz(30);
-}
+ManifoldView::ManifoldView(CurvSynthProcessor& proc) : proc_(proc) {}
 
-void ManifoldView::timerCallback()
+void ManifoldView::setFrame(const VizFrame& f)
 {
-    // two views share this bus; only one claims each fresh flag, so copy
-    // the latest frame unconditionally or the other view goes stale
-    const VizFrame* latest = nullptr;
-    proc_.vizBus().readLatest(&latest);
-    if (latest != nullptr && latest->frameId != frame_.frameId)
-        frame_ = *latest;
+    frame_ = f;
     if (frame_.presetId >= 0)
         rebuildMeshIfNeeded(frame_.presetId);
     repaint();
@@ -203,24 +195,17 @@ void ManifoldView::mouseUp(const juce::MouseEvent& e)
 
 // ------------------------------------------------------------ SpectrumView
 
-SpectrumView::SpectrumView(CurvSynthProcessor& proc) : proc_(proc)
-{
-    startTimerHz(30);
-}
+SpectrumView::SpectrumView(CurvSynthProcessor& proc) : proc_(proc) {}
 
-void SpectrumView::timerCallback()
+void SpectrumView::pushFrame(const VizFrame& f)
 {
-    const VizFrame* latest = nullptr;
-    proc_.vizBus().readLatest(&latest);
-    if (latest != nullptr) {
-        numModes_ = latest->numModes;
-        curvErr_ = latest->curvatureErr;
-        if (histLen_ == kHist)
-            std::memmove(hist_[0], hist_[1], sizeof(float) * kMaxModes * (kHist - 1));
-        else
-            ++histLen_;
-        std::memcpy(hist_[histLen_ - 1], latest->ratio, sizeof(float) * kMaxModes);
-    }
+    numModes_ = f.numModes;
+    curvErr_ = f.curvatureErr;
+    if (histLen_ == kHist)
+        std::memmove(hist_[0], hist_[1], sizeof(float) * kMaxModes * (kHist - 1));
+    else
+        ++histLen_;
+    std::memcpy(hist_[histLen_ - 1], f.ratio, sizeof(float) * kMaxModes);
     repaint();
 }
 
@@ -245,16 +230,18 @@ void SpectrumView::paint(juce::Graphics& g)
         g.setColour(juce::Colours::white.withAlpha(0.15f));
     }
 
-    // comb damping kills every other mode on the audio side; mirror that
-    // here so the knob's effect is visible, not just audible
+    // comb damping kills every other mode on the audio side; spectral warp
+    // bends the ratios. Both are audio-side, so mirror them here to keep the
+    // view honest about what you hear.
     const float comb = proc_.apvts.getRawParameterValue("comb")->load();
+    const float warp = proc_.apvts.getRawParameterValue("warp")->load();
 
     juce::Path path;
     for (int m = 0; m < numModes_; ++m) {
         path.clear();
         for (int i = 0; i < histLen_; ++i) {
             const float x = 26.0f + (w - 26.0f) * (float) i / (float) (kHist - 1);
-            const float y = fy(hist_[i][m]);
+            const float y = fy(std::pow(hist_[i][m], warp));
             i == 0 ? path.startNewSubPath(x, y) : path.lineTo(x, y);
         }
         float alpha = m == 0 ? 0.95f : 0.45f;
@@ -270,6 +257,22 @@ void SpectrumView::paint(juce::Graphics& g)
     g.setFont(12.0f);
     g.drawText("partials f_k / f_1    max|K-Kbar| = " + juce::String(curvErr_, 3),
                getLocalBounds().removeFromTop(16), juce::Justification::centredRight);
+
+    // output level meter along the bottom: green clean, amber approaching the
+    // saturator, red into the crunch — so headroom is visible, not guessed
+    const float peak = proc_.outputPeak();
+    const float db = juce::Decibels::gainToDecibels(peak, -48.0f);
+    const float norm = juce::jlimit(0.0f, 1.0f, (db + 36.0f) / 39.0f);  // -36..+3 dBFS
+    const float my = h - 5.0f, mx0 = 26.0f, mw = w - 26.0f;
+    g.setColour(juce::Colours::white.withAlpha(0.10f));
+    g.fillRect(mx0, my, mw, 4.0f);
+    const juce::Colour zone = db > 0.0f ? juce::Colour(0xFFE24B4A)
+                            : db > -6.0f ? juce::Colour(0xFFEF9F27)
+                                         : juce::Colour(0xFF1D9E75);
+    g.setColour(zone);
+    g.fillRect(mx0, my, mw * norm, 4.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.25f));
+    g.fillRect(mx0 + mw * (36.0f / 39.0f), my - 1.0f, 1.0f, 6.0f);  // 0 dBFS tick
 }
 
 // ------------------------------------------------------------ editor shell
@@ -305,15 +308,30 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "mallet", "Mallet", " Hz" }, { "impulse", "Impulse", "" },
              { "bow", "Bow", "" }, { "t60", "T60", " s" },
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
-             { "comb", "Comb", "" }, { "flowrate", "Flow Rate", "" },
-             { "sharpness", "Sharpness", "" }, { "press", "Press", "" },
-             { "presssize", "Press Size", "" }, { "memory", "Memory", "" },
+             { "warp", "Spec Warp", "" }, { "comb", "Comb", "" },
+             { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
+             { "press", "Press", "" }, { "presssize", "Press Size", "" },
+             { "memory", "Memory", "" }, { "memrate", "Mem Rate", "" },
              { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
 
     setSize(960, 560);
     setResizable(true, true);
     setResizeLimits(720, 420, 1600, 1000);
+    startTimerHz(30);
+}
+
+void CurvSynthEditor::timerCallback()
+{
+    // single read of the shared bus, then fan out to both views — fixes the
+    // two-consumer frame stealing (press visible audibly but not in the mesh,
+    // intermittent spectrum staleness)
+    const VizFrame* latest = nullptr;
+    proc_.vizBus().readLatest(&latest);
+    if (latest != nullptr) {
+        manifold_.setFrame(*latest);
+        spectrum_.pushFrame(*latest);
+    }
 }
 
 void CurvSynthEditor::addSlider(const juce::String& paramId, const juce::String& label,
@@ -358,8 +376,9 @@ juce::String CurvSynthEditor::buildStateReport() const
       << ", release " << juce::String(raw("release"), 2) << " s, comb "
       << juce::String(raw("comb"), 2) << "\n"
       << "flow: " << choice("flowmode") << ", rate " << juce::String(rate, 2)
-      << " (dt " << juce::String(0.25f * rate * rate, 4) << "/step @40Hz), sharpness "
-      << juce::String(raw("sharpness"), 2) << "\n"
+      << ", sharpness " << juce::String(raw("sharpness"), 2) << "\n"
+      << "warp: " << juce::String(raw("warp"), 2) << " (1 = physical), mem rate "
+      << juce::String(raw("memrate"), 2) << "\n"
       << "voices: " << choice("voicemode") << ", impulse " << juce::String(raw("impulse"), 2)
       << ", bow " << juce::String(raw("bow"), 2) << "\n"
       << "press: " << juce::String(raw("press"), 2) << ", size "

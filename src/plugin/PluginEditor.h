@@ -14,10 +14,12 @@
 
 namespace curv {
 
-class ManifoldView : public juce::Component, private juce::Timer
+class ManifoldView : public juce::Component
 {
 public:
     explicit ManifoldView(CurvSynthProcessor& proc);
+
+    void setFrame(const VizFrame& f);  // called by the editor (sole bus reader)
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -30,7 +32,6 @@ public:
     float curvatureErr() const { return frame_.curvatureErr; }
 
 private:
-    void timerCallback() override;
     void rebuildMeshIfNeeded(int presetId);
     juce::Point<float> project(int vi, float& depth) const;
 
@@ -47,15 +48,14 @@ private:
     std::vector<int> faceOrder_;
 };
 
-class SpectrumView : public juce::Component, private juce::Timer
+class SpectrumView : public juce::Component
 {
 public:
     explicit SpectrumView(CurvSynthProcessor& proc);
+    void pushFrame(const VizFrame& f);  // called by the editor (sole bus reader)
     void paint(juce::Graphics& g) override;
 
 private:
-    void timerCallback() override;
-
     CurvSynthProcessor& proc_;
     static constexpr int kHist = 160;
     float hist_[kHist][kMaxModes] = {};
@@ -64,7 +64,7 @@ private:
     float curvErr_ = 0.0f;
 };
 
-class CurvSynthEditor : public juce::AudioProcessorEditor
+class CurvSynthEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit CurvSynthEditor(CurvSynthProcessor& proc);
@@ -76,6 +76,9 @@ private:
     using CA = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using BA = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
+    // sole VizBus consumer: reads each frame once and distributes to both
+    // views (two readers on one SPSC buffer stole frames from each other)
+    void timerCallback() override;
     void addSlider(const juce::String& paramId, const juce::String& label,
                    const juce::String& suffix);
     juce::String buildStateReport() const;

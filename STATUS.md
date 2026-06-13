@@ -82,6 +82,34 @@ priorities).
    spectral change, healed by Relax.
 3. Damp Comb sweep on genus-2; pitch bend feel.
 
+## CHECKPOINT 3 round 6 (2026-06-13) — verdict was "passes" + bug/feel batch
+
+Fixed/added:
+- **viz frame-stealing (root cause)**: ManifoldView + SpectrumView were two
+  consumers on one SPSC VizBus, stealing frames from each other. Now the
+  editor is the sole reader and fans each frame out to both views — fixes
+  "press audible but not visible" and intermittent spectrum staleness.
+- **gain staging**: excitation scaled by makeup/sqrt(numModes) so brightness
+  and mode count no longer push the soft-clip into crunch; far more clean
+  headroom. Added an output **level meter** (green/amber/red, 0 dBFS tick).
+- **bow rework**: continuous lowpassed-noise friction drive (was stepped
+  per-control-interval = the crackle) with a strong low-frequency tilt
+  (^1.7) so a round object hums instead of only lighting upper modes.
+- **Memory Rate**: own clock, decoupled from Flow Rate (its own knob).
+- **Manual sharpness servo**: slewed target + hysteresis deadband — stops
+  the jitter/visual wobble while the slider moves.
+- **Spectral Warp** (new weirdness param, 0.2–2.5, default 1): f_k =
+  f1*(f_k/f1)^warp — breaks the physical sqrt-lambda dispersion. <1 hums
+  toward unison, >1 spreads into impossible super-stretched spectra.
+  Mirrored in the spectrum view. First answer to "surface more params for
+  implausibility."
+
+Deferred (noted for next runs): unfocused sharpening ("Sharpen Spread");
+off-center / cursor-anchored zoom; bow still "refine by ear". Aesthetic note:
+Julian finds it rich for industrial/physical sounds but not yet surprising/
+"metaphysical" — wants more weirdness params (warp is a start); expects
+modulation + keytracking + MPE to help bridge.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

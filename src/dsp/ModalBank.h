@@ -33,8 +33,10 @@ public:
         active_ = false;
         globalFrame_ = nullptr;
         injectPos_ = injectLen_ = 0;
+        bowAge_ = 0;
+        bowNoise_ = 0.0f;
         for (int m = 0; m < kMaxModes; ++m)
-            s_[m] = c_[m] = exc_[m] = 0.0f;
+            s_[m] = c_[m] = exc_[m] = bowWeight_[m] = 0.0f;
     }
 
     bool isActive() const { return active_; }
@@ -69,7 +71,11 @@ public:
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
         for (int m = 0; m < frame.numModes && k < kMaxModes; ++m) {
-            const float f = noteHz * frame.ratio[m];
+            // spectral warp: f_k = f1 * (f_k/f1)^warp breaks the physical
+            // sqrt-lambda dispersion (warp 1 = physical, >1 spreads into
+            // impossible super-stretched spectra, <1 compresses toward a hum)
+            const float warped = std::pow(frame.ratio[m], warp_);
+            const float f = noteHz * warped;
             if (f >= nyquistGuard)
                 break;  // ratios ascend; everything after is out too
             freq_[k] = f;
@@ -78,7 +84,21 @@ public:
             k++;
         }
         numModes_ = k;
-        f1_ = freq_[0];
+        f1_ = freq_[0] > 0.0f ? freq_[0] : noteHz;
+
+        // level normalization: summing K random-phase modes grows RMS ~sqrt(K),
+        // so brightness/mode-count drove the output into the soft-clip. Scale
+        // injection by makeup/sqrt(K) to keep loudness ~constant and leave
+        // clean headroom (the crunch threshold was unsatisfyingly low).
+        const float norm = 2.6f / std::sqrt((float) std::max(k, 1));
+        // bow drive: low-frequency tilt so the fundamental hums instead of the
+        // bow only lighting up the bright upper modes (coupling kept so bowing
+        // a nodal line still silences that mode, as physics demands)
+        for (int m = 0; m < k; ++m) {
+            exc_[m] *= norm;
+            bowWeight_[m] = frame.coupling[m] * norm * std::pow(f1_ / freq_[m], 1.7f);
+        }
+
         updateCoefficients(true);
         active_ = true;
         samplesUntilControl_ = 0;
@@ -101,6 +121,9 @@ public:
     // pitch wheel: multiplicative factor on all mode frequencies
     void setPitchBend(float factor) { bend_ = factor; }
 
+    // spectral warp exponent (1 = physical); read at note-on
+    void setWarp(float w) { warp_ = w; }
+
     // add this voice into out[0..n)
     void renderAdd(float* out, int n)
     {
@@ -111,6 +134,7 @@ public:
             if (samplesUntilControl_ <= 0)
                 updateCoefficients(false);
             const int run = std::min(n - i, samplesUntilControl_);
+            const bool bowing = bow_ > 0.0f && !releasing_;
             for (int j = 0; j < run; ++j) {
                 if (injectPos_ < injectLen_) {
                     // raised-cosine contact: weights sum to ~1 over the window
@@ -120,6 +144,19 @@ public:
                     for (int m = 0; m < numModes_; ++m)
                         s_[m] += exc_[m] * w;
                     ++injectPos_;
+                }
+                if (bowing) {
+                    // continuous lowpassed-noise friction drive (per-sample,
+                    // not stepped per control interval — the stepping was the
+                    // crackle), swelling in over ~0.6 s and tilted to the lows
+                    rng_ = rng_ * 1664525u + 1013904223u;
+                    const float white = (float) (int32_t) rng_ * 4.6566e-10f;
+                    bowNoise_ += kBowLp * (white - bowNoise_);  // ~1.6 kHz one-pole
+                    ++bowAge_;
+                    const float swell = std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_));
+                    const float g = bow_ * bow_ * 0.012f * swell * bowNoise_;
+                    for (int m = 0; m < numModes_; ++m)
+                        s_[m] += g * bowWeight_[m];
                 }
                 float sum = 0.0f;
                 for (int m = 0; m < numModes_; ++m) {
@@ -166,22 +203,6 @@ private:
             f1_ = freq_[0];
         }
 
-        // bow: one stochastic energy packet per control interval, weighted
-        // by the strike coupling pattern (the bow excites what the strike
-        // point couples to), swelling in over ~0.6 s so the note has a
-        // bowed attack rather than a struck one
-        if (bow_ > 0.0f && !releasing_) {
-            ++bowAge_;
-            const float swell = std::min(1.0f,
-                (float) bowAge_ * kControlInterval / (0.6f * (float) sr_));
-            const float g = bow_ * bow_ * 0.03f * swell;
-            for (int m = 0; m < numModes_; ++m) {
-                rng_ = rng_ * 1664525u + 1013904223u;
-                const float noise = (float) (int32_t) rng_ * 4.6566e-10f;  // ~[-1,1]
-                s_[m] += g * exc_[m] * noise;
-            }
-        }
-
         const float lnK = std::log(1000.0f);
         for (int m = 0; m < numModes_; ++m) {
             float t60 = releasing_
@@ -216,11 +237,15 @@ private:
     bool active_ = false;
     bool releasing_ = false;
     int samplesUntilControl_ = 0;
+    static constexpr float kBowLp = 0.20f;  // one-pole noise cutoff (~1.6 kHz @48k)
+
     float f1_ = 1.0f;
     float bow_ = 0.0f;
     float impulse_ = 1.0f;
     float impulseAmp_ = 1.0f;
     float bend_ = 1.0f;
+    float warp_ = 1.0f;
+    float bowNoise_ = 0.0f;
     int bowAge_ = 0;
     int injectPos_ = 0;
     int injectLen_ = 0;
@@ -230,6 +255,7 @@ private:
 
     float freq_[kMaxModes] = {};
     float exc_[kMaxModes] = {};
+    float bowWeight_[kMaxModes] = {};
     float s_[kMaxModes] = {};
     float c_[kMaxModes] = {};
     float rc_[kMaxModes] = {};

@@ -54,6 +54,12 @@ public:
             v.setPitchBend(factor);
     }
 
+    void setWarp(float w)
+    {
+        for (auto& v : voices_)
+            v.setWarp(w);
+    }
+
     void noteOn(const SpectrumFrame& frame, int midiNote, float velocity, float malletCutoff)
     {
         ModalVoice* slot = nullptr;

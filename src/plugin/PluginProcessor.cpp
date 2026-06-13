@@ -34,6 +34,8 @@ CurvSynthProcessor::CurvSynthProcessor()
     pComb_ = apvts.getRawParameterValue("comb");
     pImpulse_ = apvts.getRawParameterValue("impulse");
     pMemory_ = apvts.getRawParameterValue("memory");
+    pMemRate_ = apvts.getRawParameterValue("memrate");
+    pWarp_ = apvts.getRawParameterValue("warp");
 
     startThread();
 }
@@ -100,10 +102,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // mallet impulse level, independent of bow (0 + bow = purely bowed)
     layout.add(std::make_unique<P>("impulse", "Impulse",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
-    // memory: 1 = deformations are permanent (the object scars), 0 = fully
-    // elastic (springs back in ~0.3 s); default heals over ~10 s
+    // memory: 1 = deformations are permanent (the object scars), 0 = elastic
     layout.add(std::make_unique<P>("memory", "Memory",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.8f));
+    // memory rate: how fast the patina decays (own clock, not Flow Rate)
+    layout.add(std::make_unique<P>("memrate", "Memory Rate",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
+    // spectral warp: f_k = f1*(f_k/f1)^warp — 1 = physical sqrt-lambda law,
+    // >1 stretches into impossible spectra, <1 compresses toward a unison hum
+    layout.add(std::make_unique<P>("warp", "Spectral Warp",
+                                   juce::NormalisableRange<float>(0.2f, 2.5f), 1.0f));
     return layout;
 }
 
@@ -115,6 +123,8 @@ void CurvSynthProcessor::run()
     float lastStrike = -1.0f, lastKick = -1.0f, lastReset = -1.0f;
     unsigned kickSeed = 1;
     double flowSinceResolve = 0.0;
+    double manualTarget = 0.0;
+    bool manualSettled = false;
     constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
                                               // bounds fast-path drift regardless of rate
     constexpr double kMaxDt = 0.25;           // per-step flow time at rate 1.0
@@ -173,17 +183,24 @@ void CurvSynthProcessor::run()
         if (flowMode == 3 && flowRate > 0.0f) {
             // Manual: servo curvature error onto the Sharpness target.
             // Position control (like a cutoff knob) rather than rate control.
+            // The target is slewed and the deadband has hysteresis so the
+            // servo settles instead of hunting (jitter/visual wobble).
             const float sharp = pSharpness_->load();
-            const double target = 3.0 * sharp * sharp;
+            const double rawTarget = 3.0 * sharp * sharp;
+            manualTarget += 0.15 * (rawTarget - manualTarget);  // slew toward the knob
             const double kErr = geometry_.curvatureError();
-            const double servoErr = target - kErr;
-            if (std::abs(servoErr) > 0.03) {
+            const double servoErr = manualTarget - kErr;
+            const double band = manualSettled ? 0.06 : 0.02;    // hysteresis
+            if (std::abs(servoErr) > band) {
+                manualSettled = false;
                 if (servoErr > 0 && kErr < 0.01)
                     geometry_.flowKick(0.05, kickSeed++);  // symmetry-break seed
                 const double dt = kMaxDt * flowRate * flowRate
                                   * std::min(1.0, std::abs(servoErr) / 0.3);
                 flowSinceResolve += geometry_.flowStep(dt, servoErr > 0 ? -1.0 : +1.0);
                 publish = true;
+            } else {
+                manualSettled = true;
             }
         } else if (flowMode != 0 && flowRate > 0.0f) {
             // reverse flow amplifies curvature deviation — but uniform
@@ -198,13 +215,14 @@ void CurvSynthProcessor::run()
             publish = true;
         }
         // Memory: elastic restoring force toward the base metric. 1 = full
-        // patina (deformations permanent), 0 = fully elastic. Runs on the
-        // same Flow Rate clock as Relax/Sharpen/Manual so the balance
-        // between flow and spring is rate-independent.
+        // patina (deformations permanent), 0 = springs back. Memory Rate is
+        // its own clock (independent of Flow Rate) so the patina-decay speed
+        // can be dialed separately from the Relax/Sharpen flow speed.
         const float memory = pMemory_->load();
+        const float memRate = pMemRate_->load();
         bool elastic = false;
-        if (memory < 0.999f && flowRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
-            const double rate = 0.9 * (double) (flowRate * flowRate)
+        if (memory < 0.999f && memRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
+            const double rate = 0.9 * (double) (memRate * memRate)
                                 * (1.0 - memory) * (1.0 - memory);
             geometry_.flowElastic(rate);
             flowSinceResolve += rate;
@@ -261,6 +279,7 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
                                ? &currentFrame_ : nullptr);
     voices_.setBow(pBow_->load());
     voices_.setImpulse(pImpulse_->load());
+    voices_.setWarp(pWarp_->load());
     const float mallet = pMallet_->load();
     gainSmoothed_.setTargetValue(juce::Decibels::decibelsToGain(pGain_->load()));
 
@@ -290,11 +309,20 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     voices_.updateActivity();
 
-    // gain + soft-clip safety, then fan out to all channels
+    // gain + soft-clip safety; track the post-gain pre-saturator peak so the
+    // editor meter warns about headroom *before* the tanh starts crunching
+    float blockPeak = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
         const float g = gainSmoothed_.getNextValue();
-        out[i] = std::tanh(out[i] * g);
+        const float pre = out[i] * g;
+        blockPeak = std::max(blockPeak, std::abs(pre));
+        out[i] = std::tanh(pre);
     }
+    const float prev = outputPeak_.load(std::memory_order_relaxed);
+    // fast attack, slow release so brief peaks stay visible
+    outputPeak_.store(blockPeak > prev ? blockPeak : prev * 0.85f + blockPeak * 0.15f,
+                      std::memory_order_relaxed);
+
     for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
         buffer.copyFrom(ch, 0, out, numSamples);
 }

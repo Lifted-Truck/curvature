@@ -94,9 +94,12 @@ int main(int argc, char** argv)
     curv::SpectrumFrame frame;
     geometry.fillFrame(frame, modes, strike);
 
+    const float warp = std::stof(get("warp", "1"));
+
     curv::ModalVoice voice;
     voice.prepare(sr);
-    voice.setBow(bow);  // before noteOn: bow crossfades the strike impulse out
+    voice.setBow(bow);  // before noteOn: independent of the mallet impulse
+    voice.setWarp(warp);
     voice.noteOn(frame, 69, 1.0f, noteHz, mallet, { t60, tilt, release }, 0);
     if (flowMode != 0)
         voice.setGlobalTuning(&frame);

@@ -40,6 +40,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     VizBus& vizBus() { return vizBus_; }
+    float outputPeak() const { return outputPeak_.load(std::memory_order_relaxed); }
 
 private:
     void run() override;  // geometry thread
@@ -72,6 +73,10 @@ private:
     std::atomic<float>* pComb_ = nullptr;
     std::atomic<float>* pImpulse_ = nullptr;    // mallet level, independent of bow
     std::atomic<float>* pMemory_ = nullptr;     // 1 = full patina, 0 = elastic
+    std::atomic<float>* pMemRate_ = nullptr;    // patina-decay speed (own clock)
+    std::atomic<float>* pWarp_ = nullptr;       // spectral dispersion exponent
+
+    std::atomic<float> outputPeak_ { 0.0f };    // pre-saturator peak, for the meter
 
     juce::SmoothedValue<float> gainSmoothed_;
 
