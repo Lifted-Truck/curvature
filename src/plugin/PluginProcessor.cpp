@@ -124,7 +124,6 @@ void CurvSynthProcessor::run()
     unsigned kickSeed = 1;
     double flowSinceResolve = 0.0;
     double manualTarget = 0.0;
-    bool manualSettled = false;
     constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
                                               // bounds fast-path drift regardless of rate
     constexpr double kMaxDt = 0.25;           // per-step flow time at rate 1.0
@@ -181,36 +180,28 @@ void CurvSynthProcessor::run()
         }
 
         bool manualMode = (flowMode == 3);
-        if (manualMode) {
-            // Manual: position control on *metric deviation* ||u - u0||, NOT
-            // on curvature error. Deviation is the monotone coordinate of the
-            // flow — Sharpen always grows it, elastic relax always shrinks it
-            // — so the knob can't reverse on itself, and the target is capped
-            // below the clamp so it's actually reachable (no endless chase /
-            // jitter at max). Chase speed is fixed (knob feels direct), not
-            // tied to Flow Rate.
+        if (manualMode && flowRate > 0.0f) {
+            // Manual = a sharpness FLOOR the servo drives the geometry UP to;
+            // it only ever adds curvature concentration, never forces it down.
+            // That way Press and Kick stack freely on top (reaching full
+            // extremes) and the return-to-smooth direction is owned by Memory
+            // — so Memory = off really means permanent. Gated by Flow Rate as
+            // the geometry clock (Flow Rate 0 freezes everything). Driven on
+            // metric deviation ||u-u0||, the monotone coordinate of the flow.
             const float sharp = pSharpness_->load();
             const double targetDev = 1.2 * sharp * sharp;   // < uClamp (1.5): reachable
             manualTarget += 0.2 * (targetDev - manualTarget);  // light slew
             const double dev = geometry_.metricDeviation();
             const double err = manualTarget - dev;
-            const double band = manualSettled ? 0.05 : 0.015;  // hysteresis
-            if (std::abs(err) > band) {
-                manualSettled = false;
-                const double dt = kMaxDt * 0.2 * std::min(1.0, std::abs(err) / 0.3);
-                if (err > 0) {  // need more deformation: reverse flow (localizes)
-                    if (dev < 1e-3)
-                        geometry_.flowKick(0.05, kickSeed++);  // seed at equilibrium
-                    flowSinceResolve += geometry_.flowStep(dt, -1.0);
-                } else {        // too sharp: elastic relax toward base (monotone)
-                    geometry_.flowElastic(0.2 * std::min(1.0, std::abs(err) / 0.3));
-                    flowSinceResolve += dt;
-                }
+            if (err > 0.015) {  // below the floor: sharpen up toward it
+                if (dev < 1e-3)
+                    geometry_.flowKick(0.05, kickSeed++);  // seed at equilibrium
+                const double dt = kMaxDt * flowRate * flowRate
+                                  * std::min(1.0, err / 0.3);
+                flowSinceResolve += geometry_.flowStep(dt, -1.0);
                 publish = true;
-            } else {
-                manualSettled = true;
             }
-        } else if (flowMode != 0 && flowRate > 0.0f) {
+        } else if (flowMode != 0 && flowMode != 3 && flowRate > 0.0f) {
             // reverse flow amplifies curvature deviation — but uniform
             // curvature is an exact fixed point, so SHARPEN from the base
             // metric would sit still forever. Seed a tiny symmetry-breaking
@@ -222,17 +213,17 @@ void CurvSynthProcessor::run()
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
             publish = true;
         }
-        // Memory: elastic restoring force toward the base metric. 1 = full
-        // patina (deformations permanent), 0 = springs back. Memory Rate is
-        // its own clock (independent of Flow Rate) so the patina-decay speed
-        // can be dialed separately from the Relax/Sharpen flow speed.
+        // Memory: elastic restoring force toward the base metric, and the
+        // sole owner of the return-to-smooth direction (incl. in Manual mode,
+        // where the servo only sharpens up). 1 = permanent (deformations and
+        // Manual sharpening persist); < 1 springs back at Memory Rate. The
+        // Manual servo re-sharpens up to its floor, so with Memory < 1 the
+        // two balance into a steady sharpness; with Memory = 1 sharpening,
+        // presses, and kicks all stay put.
         const float memory = pMemory_->load();
         const float memRate = pMemRate_->load();
         bool elastic = false;
-        // Manual mode IS a position control on deviation; Memory's restoring
-        // force would fight it and cause perpetual re-sharpening churn.
-        if (!manualMode && memory < 0.999f && memRate > 0.0f
-            && geometry_.metricDeviation() > 1e-4) {
+        if (memory < 0.999f && memRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
             const double rate = 0.9 * (double) (memRate * memRate)
                                 * (1.0 - memory) * (1.0 - memory);
             geometry_.flowElastic(rate);

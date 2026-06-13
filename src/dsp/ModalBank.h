@@ -193,19 +193,17 @@ public:
 private:
     void updateCoefficients(bool immediate)
     {
-        // retune mode frequencies at control rate so both global flow AND
-        // spectral warp are live (sweepable while notes ring) instead of
-        // frozen at note-on. Base ratio comes from the evolving spectrum in
-        // global mode, else the snapshot taken at note-on; warp bends it.
-        // The per-sample ramps below carry the sweep (coupled form stays
-        // stable under continuous frequency change).
-        {
+        // Global Flow mode: retune at control rate so the evolving spectrum
+        // AND spectral warp are live (sweepable while notes ring). Snapshot
+        // mode leaves freq_ frozen at its note-on values, so warp is per-note
+        // there — the liveness of warp tracks the Voices switch (Snapshot =
+        // the old frozen behavior, Global = live).
+        if (globalFrame_ != nullptr) {
             const float nyquistGuard = static_cast<float>(0.45 * sr_);
-            const bool global = globalFrame_ != nullptr;
-            const int gk = global ? std::min(numModes_, globalFrame_->numModes) : 0;
+            const int gk = std::min(numModes_, globalFrame_->numModes);
             const bool unitWarp = warp_ == 1.0f;
             for (int m = 0; m < numModes_; ++m) {
-                const float base = (global && m < gk) ? globalFrame_->ratio[m] : ratio_[m];
+                const float base = m < gk ? globalFrame_->ratio[m] : ratio_[m];
                 const float warped = unitWarp ? base : std::pow(base, warp_);
                 freq_[m] = std::min(noteHz_ * warped, nyquistGuard);
             }

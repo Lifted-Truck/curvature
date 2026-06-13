@@ -110,6 +110,23 @@ Julian finds it rich for industrial/physical sounds but not yet surprising/
 "metaphysical" — wants more weirdness params (warp is a start); expects
 modulation + keytracking + MPE to help bridge.
 
+## Checkpoint 3 round 7 (2026-06-13) — Manual/Memory model + warp liveness
+
+- **Manual servo reworked into a sharpness FLOOR**: it only sharpens *up*
+  toward its target, never forces deviation down. Press/Kick now stack
+  freely on top to full extremes (the previous servo relaxed any excess,
+  capping press and acting like a stuck Memory). Gated by Flow Rate (Flow
+  Rate 0 freezes). Fixes: press constrained in Manual, reversion with Flow
+  Rate off, "Memory stuck on" feel.
+- **Memory owns the return-to-smooth direction in all modes** (re-enabled in
+  Manual): Memory = 1 → sharpening/press/kick permanent; < 1 → springs back
+  at Memory Rate, balancing against the servo's up-push. Trade-off to note:
+  at Memory = 1, lowering Sharpness doesn't actively un-sharpen (use Memory
+  < 1 or Reset Shape).
+- **Spectral Warp liveness tied to the Voices switch**: Global Flow = warp
+  live (sweepable while ringing); Snapshot = warp frozen per-note (the old
+  behavior Julian wanted back). No new param.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,
