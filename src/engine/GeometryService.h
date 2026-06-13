@@ -42,6 +42,7 @@ public:
     // frame-to-frame trajectories stay continuous through the re-solve
     void resolve();
     double curvatureError() const { return flow_->curvatureError(); }
+    double curvatureRms() const { return flow_->curvatureRms(); }
 
     const Mesh& mesh() const { return mesh_; }
     const Eigen::VectorXd& lambda() const { return lambda_; }

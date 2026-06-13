@@ -48,7 +48,8 @@ public:
         return curvatures(u_).array() - kTarget_;
     }
 
-    double curvatureError() const;
+    double curvatureError() const;   // max |K_i - Kbar| (peak; can hop vertices)
+    double curvatureRms() const;     // RMS |K_i - Kbar| (smooth servo variable)
 
     // write the current metric into a mesh's faceLengths
     void writeFaceLengths(Mesh& mesh) const;

@@ -182,24 +182,27 @@ void CurvSynthProcessor::run()
 
         bool manualMode = (flowMode == 3);
         if (manualMode && flowRate > 0.0f) {
-            // Manual = a sharpness FLOOR the servo drives the geometry UP to;
-            // it only ever adds curvature concentration, never forces it down.
-            // That way Press and Kick stack freely on top (reaching full
-            // extremes) and the return-to-smooth direction is owned by Memory
-            // — so Memory = off really means permanent. Gated by Flow Rate as
-            // the geometry clock (Flow Rate 0 freezes everything). Driven on
-            // metric deviation ||u-u0||, the monotone coordinate of the flow.
+            // Manual = a bidirectional position control that scrubs the object
+            // along the Ricci flow. Up runs reverse flow (sharpen, concentrate
+            // curvature); down runs FORWARD flow (relax — literally walking
+            // back down the flow toward uniform curvature, smoothing). Driven
+            // on RMS curvature (smooth — unlike max|K-Kbar|, which hops between
+            // vertices and was the jitter source) toward a reachable target
+            // (plateau ~0.6-0.78 across presets, so 0.5 is always reachable ->
+            // settles, no endless chase at full-up). Gated by Flow Rate.
             const float sharp = pSharpness_->load();
-            const double targetDev = 1.2 * sharp * sharp;   // < uClamp (1.5): reachable
-            manualTarget += 0.2 * (targetDev - manualTarget);  // light slew
-            const double dev = geometry_.metricDeviation();
-            const double err = manualTarget - dev;
-            if (err > 0.015) {  // below the floor: sharpen up toward it
-                if (dev < 1e-3)
+            const double target = 0.5 * sharp * sharp;
+            manualTarget += 0.2 * (target - manualTarget);  // light slew
+            const double rms = geometry_.curvatureRms();
+            const double err = manualTarget - rms;
+            const double dt = kMaxDt * flowRate * flowRate * std::min(1.0, std::abs(err) / 0.2);
+            if (err > 0.01) {        // too smooth: reverse flow up toward target
+                if (rms < 0.01)
                     geometry_.flowKick(0.05, kickSeed++);  // seed at equilibrium
-                const double dt = kMaxDt * flowRate * flowRate
-                                  * std::min(1.0, err / 0.3);
                 flowSinceResolve += geometry_.flowStep(dt, -1.0);
+                publish = true;
+            } else if (err < -0.01) {  // too sharp: forward flow back down
+                flowSinceResolve += geometry_.flowStep(dt, +1.0);
                 publish = true;
             }
         } else if (flowMode != 0 && flowMode != 3 && flowRate > 0.0f) {
@@ -214,17 +217,16 @@ void CurvSynthProcessor::run()
             flowSinceResolve += geometry_.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
             publish = true;
         }
-        // Memory: elastic restoring force toward the base metric, and the
-        // sole owner of the return-to-smooth direction (incl. in Manual mode,
-        // where the servo only sharpens up). 1 = permanent (deformations and
-        // Manual sharpening persist); < 1 springs back at Memory Rate. The
-        // Manual servo re-sharpens up to its floor, so with Memory < 1 the
-        // two balance into a steady sharpness; with Memory = 1 sharpening,
-        // presses, and kicks all stay put.
+        // Memory: elastic restoring force toward the base metric for the
+        // Off/Relax/Sharpen modes (1 = deformations permanent, < 1 springs
+        // back at Memory Rate). Disabled in Manual mode — there the
+        // bidirectional servo owns the geometry position and Memory would
+        // fight it (the churn Julian hit earlier).
         const float memory = pMemory_->load();
         const float memRate = pMemRate_->load();
         bool elastic = false;
-        if (memory < 0.999f && memRate > 0.0f && geometry_.metricDeviation() > 1e-4) {
+        if (!manualMode && memory < 0.999f && memRate > 0.0f
+            && geometry_.metricDeviation() > 1e-4) {
             const double rate = 0.9 * (double) (memRate * memRate)
                                 * (1.0 - memory) * (1.0 - memory);
             geometry_.flowElastic(rate);

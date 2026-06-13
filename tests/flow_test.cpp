@@ -140,20 +140,33 @@ TEST_CASE("manual servo invariant: metric deviation is monotone under the flow")
     REQUIRE(dev < 1e-3);             // and converges back to base
 }
 
-TEST_CASE("bipolar press: negative smooths what positive sharpened")
+TEST_CASE("manual servo invariant: RMS curvature is smooth and bidirectional")
 {
-    auto mesh = makeIcosphere(3);
-    RicciFlow flow(mesh);
-    const int vtx = 100;
+    // Manual mode scrubs along the flow on RMS curvature: reverse flow raises
+    // it (sharpen, up), forward flow lowers it (relax, down — 'walking back
+    // down the flow'). RMS is the smooth servo variable (max|K-Kbar| hops
+    // between vertices and was the jitter source).
+    GeometryService geo;
+    geo.loadPreset(PresetId::Icosphere, nullptr, 0);
+    geo.flowKick(0.05, 1);
 
-    for (int i = 0; i < 30; ++i)        // sharp press: concentrate curvature
-        flow.press(vtx, 2.0, 0.05, 2.2);
-    const double sharpErr = flow.curvatureError();
-    REQUIRE(sharpErr > 0.05);            // it did concentrate curvature
+    double rms = geo.curvatureRms();
+    for (int i = 0; i < 40; ++i) {        // up: reverse flow raises RMS
+        geo.flowStep(0.2, -1.0);
+        const double r = geo.curvatureRms();
+        REQUIRE(r >= rms - 1e-6);
+        rms = r;
+    }
+    const double sharpened = rms;
+    REQUIRE(sharpened > 0.05);            // it did sharpen
 
-    for (int i = 0; i < 60; ++i)        // smooth press at the same spot
-        flow.press(vtx, -2.0, 0.05, 2.2);
-    REQUIRE(flow.curvatureError() < 0.6 * sharpErr);  // diffused the concentration
+    for (int i = 0; i < 300; ++i) {       // down: forward flow lowers RMS
+        geo.flowStep(0.2, +1.0);
+        const double r = geo.curvatureRms();
+        REQUIRE(r <= rms + 1e-6);
+        rms = r;
+    }
+    REQUIRE(rms < 0.3 * sharpened);       // smoothing walked it back down
 }
 
 TEST_CASE("flow reset restores the base spectrum")

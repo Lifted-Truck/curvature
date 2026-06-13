@@ -104,6 +104,12 @@ double RicciFlow::curvatureError() const
     return (curvatures(u_).array() - kTarget_).abs().maxCoeff();
 }
 
+double RicciFlow::curvatureRms() const
+{
+    const Eigen::VectorXd dev = curvatures(u_).array() - kTarget_;
+    return std::sqrt(dev.squaredNorm() / (double) dev.size());
+}
+
 double RicciFlow::step(double dt, double direction)
 {
     const Eigen::VectorXd K = curvatures(u_);
@@ -170,41 +176,17 @@ void RicciFlow::press(int vertex, double amount, double dt, double sigma)
         pressSigma_ = sigma;
     }
 
-    if (amount >= 0.0) {
-        // sharp press: inject a conformal bump — concentrates curvature,
-        // brightens / spreads the spectrum (eigenfunction localization)
-        double scale = amount * dt;
-        for (int tries = 0; tries < 8; ++tries) {
-            Eigen::VectorXd uNew = u_ + scale * pressProfile_;
-            uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
-            if (isValid(uNew)) {
-                u_ = std::move(uNew);
-                return;
-            }
-            scale *= 0.5;
-        }
-    } else {
-        // smooth press: locally diffuse the metric toward its neighbourhood
-        // average (graph heat step) within the footprint — flattens curvature,
-        // rounds / darkens the spectrum. Rounds out whatever roughness is
-        // there (sharp presses, kicks, or intrinsic genus-2 curvature).
-        const int n = mesh_->numVertices();
-        const double rate = std::min(-amount * dt, 0.5);
-        Eigen::VectorXd lap(n);
-        for (int i = 0; i < n; ++i) {
-            double s = 0.0;
-            for (int nb : adjacency_[(size_t) i])
-                s += u_[nb];
-            const double avg = adjacency_[(size_t) i].empty()
-                                   ? u_[i] : s / (double) adjacency_[(size_t) i].size();
-            // footprint must be non-negative or the mean-free profile's far
-            // field would anti-diffuse (sharpen) instead of smooth
-            lap[i] = rate * std::max(pressProfile_[i], 0.0) * (avg - u_[i]);
-        }
-        Eigen::VectorXd uNew = u_ + lap;
+    // localized conformal bump: concentrates curvature at the strike point
+    // (a free deformation gesture; persists per Memory, healed by flow/Reset)
+    double scale = amount * dt;
+    for (int tries = 0; tries < 8; ++tries) {
+        Eigen::VectorXd uNew = u_ + scale * pressProfile_;
         uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
-        if (isValid(uNew))
+        if (isValid(uNew)) {
             u_ = std::move(uNew);
+            return;
+        }
+        scale *= 0.5;
     }
 }
 

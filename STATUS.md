@@ -130,6 +130,22 @@ modulation + keytracking + MPE to help bridge.
   (sharp/bright, the original press), negative diffuses it via a local graph
   heat step within the footprint (smooth/round). Smoothing acts on existing
   roughness — sharp presses, kicks, or intrinsic genus-2 curvature.
+  *(Round 8: reverted — bipolar press was not worth it; Press is unipolar
+  again, the free deformation gesture.)*
+
+## Round 8 (2026-06-13) — Manual servo rebuilt bidirectional; press reverted
+
+- **Press reverted to unipolar** (0..1) free deformation gesture (bipolar
+  added little).
+- **Manual is bidirectional again**: a position control scrubbing along the
+  Ricci flow. Up = reverse flow (sharpen), DOWN = forward flow (relax —
+  walks back down the flow, smoothing). My earlier only-up + Memory-owns-down
+  design (to dodge jitter) broke down-smoothing — this restores it.
+- **Jitter fixed at the source**: the servo now drives **RMS curvature**
+  (smooth) instead of max|K-Kbar| (a max that hops between vertices = the
+  jitter), toward a reachable target (0.5·sharp²; reverse-flow plateau is
+  ~0.6-0.78 across presets, so it settles instead of chasing). Memory
+  disabled in Manual (the bidirectional servo owns position).
 
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
