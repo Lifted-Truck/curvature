@@ -47,6 +47,12 @@ RicciFlow::RicciFlow(const Mesh& mesh, double uClamp)
 
     const int chi = mesh.eulerCharacteristic();
     kTarget_ = 2.0 * M_PI * chi / n;
+
+    adjacency_.assign((size_t) n, {});
+    for (const auto& e : edges_) {
+        adjacency_[(size_t) e[0]].push_back(e[1]);
+        adjacency_[(size_t) e[1]].push_back(e[0]);
+    }
 }
 
 void RicciFlow::faceLengthsFor(const Eigen::VectorXd& u,
@@ -139,18 +145,13 @@ void RicciFlow::relaxToBase(double rate)
 void RicciFlow::press(int vertex, double amount, double dt, double sigma)
 {
     if (vertex != pressVertex_ || sigma != pressSigma_) {
-        // BFS graph distance from the pressed vertex; bump = exp(-(d/2.2)^2)
+        // BFS graph distance from the pressed vertex; bump = exp(-(d/sigma)^2)
         const int n = mesh_->numVertices();
         std::vector<int> dist((size_t) n, -1);
-        std::vector<std::vector<int>> adj((size_t) n);
-        for (const auto& e : edges_) {
-            adj[(size_t) e[0]].push_back(e[1]);
-            adj[(size_t) e[1]].push_back(e[0]);
-        }
         std::vector<int> queue { vertex };
         dist[(size_t) vertex] = 0;
         for (size_t qi = 0; qi < queue.size(); ++qi)
-            for (int nb : adj[(size_t) queue[qi]])
+            for (int nb : adjacency_[(size_t) queue[qi]])
                 if (dist[(size_t) nb] < 0) {
                     dist[(size_t) nb] = dist[(size_t) queue[qi]] + 1;
                     queue.push_back(nb);
@@ -169,15 +170,41 @@ void RicciFlow::press(int vertex, double amount, double dt, double sigma)
         pressSigma_ = sigma;
     }
 
-    double scale = amount * dt;
-    for (int tries = 0; tries < 8; ++tries) {
-        Eigen::VectorXd uNew = u_ + scale * pressProfile_;
-        uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
-        if (isValid(uNew)) {
-            u_ = std::move(uNew);
-            return;
+    if (amount >= 0.0) {
+        // sharp press: inject a conformal bump — concentrates curvature,
+        // brightens / spreads the spectrum (eigenfunction localization)
+        double scale = amount * dt;
+        for (int tries = 0; tries < 8; ++tries) {
+            Eigen::VectorXd uNew = u_ + scale * pressProfile_;
+            uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
+            if (isValid(uNew)) {
+                u_ = std::move(uNew);
+                return;
+            }
+            scale *= 0.5;
         }
-        scale *= 0.5;
+    } else {
+        // smooth press: locally diffuse the metric toward its neighbourhood
+        // average (graph heat step) within the footprint — flattens curvature,
+        // rounds / darkens the spectrum. Rounds out whatever roughness is
+        // there (sharp presses, kicks, or intrinsic genus-2 curvature).
+        const int n = mesh_->numVertices();
+        const double rate = std::min(-amount * dt, 0.5);
+        Eigen::VectorXd lap(n);
+        for (int i = 0; i < n; ++i) {
+            double s = 0.0;
+            for (int nb : adjacency_[(size_t) i])
+                s += u_[nb];
+            const double avg = adjacency_[(size_t) i].empty()
+                                   ? u_[i] : s / (double) adjacency_[(size_t) i].size();
+            // footprint must be non-negative or the mean-free profile's far
+            // field would anti-diffuse (sharpen) instead of smooth
+            lap[i] = rate * std::max(pressProfile_[i], 0.0) * (avg - u_[i]);
+        }
+        Eigen::VectorXd uNew = u_ + lap;
+        uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
+        if (isValid(uNew))
+            u_ = std::move(uNew);
     }
 }
 

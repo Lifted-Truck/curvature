@@ -89,10 +89,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
         "voicemode", "Voices", juce::StringArray { "Snapshot", "Global Flow" }, 1));
     layout.add(std::make_unique<P>("bow", "Bow",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
-    // Phase 3: press = localized curvature injection at the strike point
-    // (a bump grows under your finger; Relax heals it)
-    layout.add(std::make_unique<P>("press", "Press",
-                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // Phase 3: press = localized metric deformation at the strike point.
+    // Bipolar — positive concentrates curvature (sharp/bright), negative
+    // diffuses it (smooth/round). 0 = no press.
+    layout.add(std::make_unique<P>("press", "Press (smooth<>sharp)",
+                                   juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
     // press bump falloff radius: pointy dent .. broad swell
     layout.add(std::make_unique<P>("presssize", "Press Size",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
@@ -172,9 +173,9 @@ void CurvSynthProcessor::run()
         lastReset = reset;
 
         const float press = pPress_->load();
-        if (press > 0.001f) {
+        if (std::abs(press) > 0.001f) {
             const double sigma = 0.8 + 5.2 * (double) pPressSize_->load();
-            geometry_.flowPress(strike, 2.5 * press, 0.05, sigma);
+            geometry_.flowPress(strike, 2.5 * press, 0.05, sigma);  // sign: + sharp, - smooth
             flowSinceResolve += 0.05;
             publish = true;
         }
@@ -247,7 +248,7 @@ void CurvSynthProcessor::run()
             lastStrike = strike;
         }
 
-        wait(kGeometryPollMs >> ((flowMode != 0 || press > 0.001f || elastic) ? 1 : 0));
+        wait(kGeometryPollMs >> ((flowMode != 0 || std::abs(press) > 0.001f || elastic) ? 1 : 0));
         } catch (...) {
             lastManifold = -1;       // force reload + republish next iteration
             flowSinceResolve = 0.0;

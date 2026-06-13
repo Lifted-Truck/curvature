@@ -64,6 +64,7 @@ private:
     double kTarget_ = 0.0;
 
     std::vector<std::array<int, 2>> edges_;
+    std::vector<std::vector<int>> adjacency_;   // vertex -> neighbour vertices
     std::vector<std::array<int, 3>> faceEdge_;  // face corner -> edge index (opposite)
     Eigen::VectorXd invDist_;                   // per edge
     Eigen::VectorXd u0_, u_;

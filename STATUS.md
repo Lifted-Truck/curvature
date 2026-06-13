@@ -126,6 +126,10 @@ modulation + keytracking + MPE to help bridge.
 - **Spectral Warp liveness tied to the Voices switch**: Global Flow = warp
   live (sweepable while ringing); Snapshot = warp frozen per-note (the old
   behavior Julian wanted back). No new param.
+- **Press is now bipolar** (range -1..+1): positive concentrates curvature
+  (sharp/bright, the original press), negative diffuses it via a local graph
+  heat step within the footprint (smooth/round). Smoothing acts on existing
+  roughness — sharp presses, kicks, or intrinsic genus-2 curvature.
 
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 

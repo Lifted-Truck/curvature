@@ -140,6 +140,22 @@ TEST_CASE("manual servo invariant: metric deviation is monotone under the flow")
     REQUIRE(dev < 1e-3);             // and converges back to base
 }
 
+TEST_CASE("bipolar press: negative smooths what positive sharpened")
+{
+    auto mesh = makeIcosphere(3);
+    RicciFlow flow(mesh);
+    const int vtx = 100;
+
+    for (int i = 0; i < 30; ++i)        // sharp press: concentrate curvature
+        flow.press(vtx, 2.0, 0.05, 2.2);
+    const double sharpErr = flow.curvatureError();
+    REQUIRE(sharpErr > 0.05);            // it did concentrate curvature
+
+    for (int i = 0; i < 60; ++i)        // smooth press at the same spot
+        flow.press(vtx, -2.0, 0.05, 2.2);
+    REQUIRE(flow.curvatureError() < 0.6 * sharpErr);  // diffused the concentration
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;
