@@ -104,6 +104,13 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
         frame.ratio[m] = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
 }
 
+void GeometryService::strikeKick(float strikeParam, double amount, unsigned seed)
+{
+    flow_->strikeKick(strikeVertex(strikeParam), amount, seed);
+    flow_->writeFaceLengths(mesh_);
+    rayleighUpdate();
+}
+
 void GeometryService::rippleStrike(float strikeParam, double amount)
 {
     flow_->rippleStrike(strikeVertex(strikeParam), amount);
@@ -144,13 +151,22 @@ void GeometryService::rayleighUpdate()
     // Rayleigh quotients of the (stale) eigenbasis with the current
     // operator: second-order accurate in the basis drift, never NaN, and
     // costs k sparse quadratic forms — the real-time escape hatch
-    // (PROPOSAL.md section 4.3).
-    const auto lap = buildCotanLaplacian(mesh_);
+    // (PROPOSAL.md section 4.3). If the (possibly rippled) metric degenerates
+    // a triangle, buildCotanLaplacian throws — coast on the last values
+    // rather than letting it reset the engine.
+    LaplacianPair lap;
+    try {
+        lap = buildCotanLaplacian(mesh_);
+    } catch (...) {
+        return;
+    }
     for (int m = 0; m < (int) lambda_.size(); ++m) {
         const auto& phi = modes_.phi.col(m);
         const double num = phi.dot(lap.L * phi);
         const double den = phi.dot(lap.massDiag.asDiagonal() * phi);
-        lambda_[m] = std::max(num / std::max(den, 1e-300), 0.0);
+        const double lam = num / std::max(den, 1e-300);
+        if (std::isfinite(lam))
+            lambda_[m] = std::max(lam, 0.0);
     }
 
     // post-resolve reconciliation: walk the published values from the old
@@ -165,8 +181,21 @@ void GeometryService::rayleighUpdate()
 
 void GeometryService::resolve()
 {
-    const auto lap = buildCotanLaplacian(mesh_);
-    ModeSet fresh = solveModes(lap, kMaxModes);
+    // At extreme curvature concentration the eigensolver can fail to converge
+    // (or the metric can degenerate). That must NOT reset the instrument — per
+    // the engine's rule, coast on the last good spectrum. A failed or garbage
+    // solve is swallowed here and we keep the current basis; the object holds
+    // at the limit instead of crashing and reloading.
+    LaplacianPair lap;
+    ModeSet fresh;
+    try {
+        lap = buildCotanLaplacian(mesh_);
+        fresh = solveModes(lap, kMaxModes);
+    } catch (...) {
+        return;  // solve failed: coast on the previous modes
+    }
+    if (!fresh.lambda.allFinite() || !fresh.phi.allFinite())
+        return;  // garbage solve: keep the last good basis
 
     // greedy matching against the previous basis so mode identities (and
     // therefore frame ratios) stay continuous through the re-solve. Score =

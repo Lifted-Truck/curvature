@@ -31,6 +31,8 @@ public:
     // press gesture: localized curvature injection at the strike vertex;
     // sigma = falloff radius in graph hops (pointy ~0.8 .. broad ~6)
     void flowPress(float strikeParam, double amount, double dt, double sigma);
+    // strike kick: gentle localized random deformation at the strike vertex
+    void strikeKick(float strikeParam, double amount, unsigned seed);
     // strike ripple: inject a propagating wave at the strike vertex, advance it
     void rippleStrike(float strikeParam, double amount);
     void rippleStep(double dt, double speed, double damp);

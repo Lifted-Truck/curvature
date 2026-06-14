@@ -151,6 +151,64 @@ void RicciFlow::relaxToBase(double rate)
     }
 }
 
+void RicciFlow::strikeKick(int vertex, double amount, unsigned seed)
+{
+    const int n = mesh_->numVertices();
+
+    // smooth random field (a few neighbour-averaging passes over white noise)
+    std::mt19937 rng(seed);
+    std::normal_distribution<double> nd;
+    Eigen::VectorXd r(n);
+    for (int i = 0; i < n; ++i)
+        r[i] = nd(rng);
+    for (int pass = 0; pass < 4; ++pass) {
+        Eigen::VectorXd avg(n);
+        for (int i = 0; i < n; ++i) {
+            double s = 0.0;
+            for (int nb : adjacency_[(size_t) i])
+                s += r[nb];
+            avg[i] = adjacency_[(size_t) i].empty()
+                         ? r[i] : s / (double) adjacency_[(size_t) i].size();
+        }
+        r = 0.5 * r + 0.5 * avg;
+    }
+
+    // window to a neighbourhood of the strike vertex (BFS distance, ~3-hop sigma)
+    std::vector<int> dist((size_t) n, -1);
+    std::vector<int> queue { vertex };
+    dist[(size_t) vertex] = 0;
+    for (size_t qi = 0; qi < queue.size(); ++qi)
+        for (int nb : adjacency_[(size_t) queue[qi]])
+            if (dist[(size_t) nb] < 0 && dist[(size_t) queue[qi]] < 7) {
+                dist[(size_t) nb] = dist[(size_t) queue[qi]] + 1;
+                queue.push_back(nb);
+            }
+    Eigen::VectorXd field = Eigen::VectorXd::Zero(n);
+    for (int i = 0; i < n; ++i)
+        if (dist[(size_t) i] >= 0) {
+            const double d = dist[(size_t) i] / 3.0;
+            field[i] = r[i] * std::exp(-d * d);
+        }
+
+    // mean-free + normalized, so the kick is scale-neutral (self-correcting)
+    field.array() -= field.mean();
+    const double peak = field.cwiseAbs().maxCoeff();
+    if (peak < 1e-12)
+        return;
+    field *= amount / peak;
+
+    double scale = 1.0;
+    for (int tries = 0; tries < 8; ++tries) {
+        Eigen::VectorXd uNew = u_ + scale * field;
+        uNew = u0_.array() + (uNew - u0_).array().min(uClamp_).max(-uClamp_);
+        if (isValid(uNew)) {
+            u_ = std::move(uNew);
+            return;
+        }
+        scale *= 0.5;
+    }
+}
+
 void RicciFlow::press(int vertex, double amount, double dt, double sigma)
 {
     if (vertex != pressVertex_ || sigma != pressSigma_) {
@@ -288,8 +346,8 @@ void RicciFlow::rippleStep(double dt, double speed, double damp)
     }
     rippleVel_ += dt * accel;
     ripple_ += dt * rippleVel_;
-    // keep the transient bounded so u_ + ripple_ stays a valid metric
-    ripple_ = ripple_.cwiseMax(-0.6).cwiseMin(0.6);
+    // keep the transient bounded (a degenerate u_+ripple_ just coasts now)
+    ripple_ = ripple_.cwiseMax(-1.0).cwiseMin(1.0);
     rippleEnergy_ = ripple_.squaredNorm() + rippleVel_.squaredNorm();
 }
 

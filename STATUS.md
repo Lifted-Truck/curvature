@@ -181,6 +181,23 @@ the instrument.
 - gates: 20 Catch2 cases (+ripple return-to-rest, strike-queue FIFO/threaded),
   pluginval 10, FFT oracle <1 cent, ASan + TSan clean.
 
+## Round 11 (2026-06-13) — strike kick, ripple amplitude, extreme-sharpness crash
+
+- **Crash fix (extreme sharpness reset)**: at high concentration the
+  eigensolver fails / the metric degenerates; the geometry thread was
+  catching the exception and reloading the preset ("curls to an extreme then
+  resets"). Now `resolve()` and `rayleighUpdate()` swallow eigensolve/
+  degenerate-metric failures and COAST on the last good spectrum (per the
+  engine's never-glitch rule) — the object holds at the limit instead of
+  resetting. Reproduced + guarded by a new soak test.
+- **Strike Kick** (was Strike Dent): the brutal clean inward dent is replaced
+  by a gentle, mean-free, smooth-random localized deformation (varied per
+  hit via seed), self-correcting (scale-neutral, heals per Memory). More
+  varied/interesting than a fixed dent.
+- **Ripple amplitude raised** for testing the limit: injection 0.4 -> 1.4,
+  clamp +/-0.6 -> +/-1.0 (degenerate combos just coast now, so safe to push).
+- gates: 21 Catch2 cases, pluginval 10, FFT oracle <1 cent, ASan + TSan clean.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

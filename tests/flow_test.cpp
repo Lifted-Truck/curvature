@@ -169,6 +169,29 @@ TEST_CASE("manual servo invariant: RMS curvature is smooth and bidirectional")
     REQUIRE(rms < 0.3 * sharpened);       // smoothing walked it back down
 }
 
+TEST_CASE("extreme sharpen + strike kicks never throw (engine coasts, no reset)")
+{
+    // reproduces the runaway: drive curvature concentration hard while
+    // stamping strike kicks. resolve()/rayleighUpdate must swallow any
+    // eigensolve/degenerate-metric failure and coast, never throw — so the
+    // host-side geometry loop never has to reset the instrument.
+    GeometryService geo;
+    geo.loadPreset(PresetId::Icosphere, nullptr, 0);
+    unsigned seed = 1;
+    for (int i = 0; i < 600; ++i) {
+        REQUIRE_NOTHROW(geo.flowStep(0.25, -1.0));   // hard reverse flow (sharpen)
+        if (i % 5 == 0)
+            REQUIRE_NOTHROW(geo.strikeKick(0.42f, 0.45, seed++));
+        if (i % 20 == 19)
+            REQUIRE_NOTHROW(geo.resolve());
+        // whatever happens to the metric, the published spectrum stays finite
+        SpectrumFrame f;
+        geo.fillFrame(f, 96, 0.42f);
+        for (int m = 0; m < f.numModes; ++m)
+            REQUIRE(std::isfinite(f.ratio[m]));
+    }
+}
+
 TEST_CASE("ripple: a strike wave propagates outward then damps to rest")
 {
     auto mesh = makeIcosphere(3);

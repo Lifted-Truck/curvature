@@ -199,11 +199,11 @@ void CurvSynthProcessor::run()
         const float strikeRipple = pStrikeRipple_->load();
         StrikeEvent hit;
         for (int drained = 0; drained < 16 && strikes_.pop(hit); ++drained) {
-            if (strikeDeform > 0.001f)
-                geometry_.flowPress(hit.strikeParam,
-                                    -0.7 * strikeDeform * hit.velocity, 1.0, 1.8);
-            if (strikeRipple > 0.001f)
-                geometry_.rippleStrike(hit.strikeParam, 0.4 * strikeRipple * hit.velocity);
+            if (strikeDeform > 0.001f)  // gentle, varied, self-correcting localized kick
+                geometry_.strikeKick(hit.strikeParam,
+                                     0.45 * strikeDeform * hit.velocity, kickSeed++);
+            if (strikeRipple > 0.001f)  // strong injection — let it be pushed to the limit
+                geometry_.rippleStrike(hit.strikeParam, 1.4 * strikeRipple * hit.velocity);
             flowSinceResolve += 0.05;
             publish = true;
         }

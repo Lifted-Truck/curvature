@@ -27,6 +27,12 @@ public:
     // one Euler step; direction +1 = RELAX, -1 = SHARPEN; returns dt taken
     double step(double dt, double direction);
 
+    // strike kick: a gentle, mean-free, smooth-random deformation localized
+    // near a vertex (varied per seed) — temporary random lumps the strike
+    // stamps into the metric; healed per Memory. Scale-neutral so it
+    // self-corrects rather than accumulating.
+    void strikeKick(int vertex, double amount, unsigned seed);
+
     // press gesture: continuous localized curvature injection around a
     // vertex (a localized SHARPEN — forward flow heals it on release).
     // Profile is a smooth mean-free bump over graph distance with falloff
