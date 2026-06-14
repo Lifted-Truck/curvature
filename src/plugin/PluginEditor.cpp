@@ -33,6 +33,13 @@ void ManifoldView::rebuildMeshIfNeeded(int presetId)
 {
     if (presetId == meshPresetId_)
         return;
+    meshPresetId_ = presetId;
+    is4DView_ = presetIs4D((PresetId) presetId);
+    if (is4DView_) {
+        tetMesh_ = makeTetPreset((PresetId) presetId);
+        return;  // wireframe path needs no triangle mesh / normals
+    }
+
     const char* obj = BinaryData::genus2_obj;
     size_t objSize = (size_t) BinaryData::genus2_objSize;
     if ((PresetId) presetId == PresetId::Mandelbulb) {
@@ -40,7 +47,6 @@ void ManifoldView::rebuildMeshIfNeeded(int presetId)
         objSize = (size_t) BinaryData::mandelbulb_objSize;
     }
     displayMesh_ = makePreset((PresetId) presetId, obj, objSize);
-    meshPresetId_ = presetId;
     faceOrder_.resize(displayMesh_.F.size());
 
     // area-weighted vertex normals: press bulges displace along the surface
@@ -72,12 +78,27 @@ void ManifoldView::rebuildMeshIfNeeded(int presetId)
 
 juce::Point<float> ManifoldView::project(int vi, float& depth) const
 {
-    const auto& v = displayMesh_.V[(size_t) vi];
-    const auto& nrm = vertexNormals_[(size_t) vi];
-    const float d = (vi < frame_.numVerts ? 0.35f * frame_.uDev[vi] : 0.0f) * meshExtent_;
-    const float x = (float) v[0] + nrm[0] * d;
-    const float y = (float) v[1] + nrm[1] * d;
-    const float z = (float) v[2] + nrm[2] * d;
+    float x, y, z;
+    if (is4DView_) {
+        // 3-torus lattice: center the cube, displace each vertex radially by
+        // its conformal factor so the lattice "breathes" (no surface normal)
+        const auto& v = tetMesh_.V[(size_t) vi];
+        const float px = (float) v[0] - 0.5f * (float) tetMesh_.a;
+        const float py = (float) v[1] - 0.5f * (float) tetMesh_.b;
+        const float pz = (float) v[2] - 0.5f * (float) tetMesh_.c;
+        const float rlen = std::sqrt(px * px + py * py + pz * pz) + 1e-6f;
+        const float d = (vi < frame_.numVerts ? 0.5f * frame_.uDev[vi] : 0.0f) * meshExtent_;
+        x = px + px / rlen * d;
+        y = py + py / rlen * d;
+        z = pz + pz / rlen * d;
+    } else {
+        const auto& v = displayMesh_.V[(size_t) vi];
+        const auto& nrm = vertexNormals_[(size_t) vi];
+        const float d = (vi < frame_.numVerts ? 0.35f * frame_.uDev[vi] : 0.0f) * meshExtent_;
+        x = (float) v[0] + nrm[0] * d;
+        y = (float) v[1] + nrm[1] * d;
+        z = (float) v[2] + nrm[2] * d;
+    }
     const float cy = std::cos(yaw_), sy = std::sin(yaw_);
     const float cp = std::cos(pitch_), sp = std::sin(pitch_);
     const float x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
@@ -93,17 +114,30 @@ juce::Point<float> ManifoldView::project(int vi, float& depth) const
 void ManifoldView::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xFF161512));
-    if (meshPresetId_ < 0 || displayMesh_.numFaces() == 0)
+    if (meshPresetId_ < 0)
         return;
 
     // recompute extent once per mesh (cheap; n small)
     if (extentPresetId_ != meshPresetId_) {
         float ext = 0.0f;
-        for (const auto& v : displayMesh_.V)
-            ext = std::max(ext, (float) std::sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]));
+        if (is4DView_) {
+            const float cx = 0.5f * (float) tetMesh_.a, cy = 0.5f * (float) tetMesh_.b,
+                        cz = 0.5f * (float) tetMesh_.c;
+            for (const auto& v : tetMesh_.V)
+                ext = std::max(ext, std::sqrt(((float) v[0] - cx) * ((float) v[0] - cx)
+                                              + ((float) v[1] - cy) * ((float) v[1] - cy)
+                                              + ((float) v[2] - cz) * ((float) v[2] - cz)));
+        } else {
+            for (const auto& v : displayMesh_.V)
+                ext = std::max(ext, (float) std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
+        }
         meshExtent_ = std::max(ext, 0.1f);
         extentPresetId_ = meshPresetId_;
     }
+
+    if (is4DView_) { paintWireframe(g); return; }
+    if (displayMesh_.numFaces() == 0)
+        return;
 
     const int nv = displayMesh_.numVertices();
     std::vector<juce::Point<float>> pts((size_t) nv);
@@ -151,6 +185,58 @@ void ManifoldView::paint(juce::Graphics& g)
                getLocalBounds().removeFromBottom(18), juce::Justification::centred);
 }
 
+void ManifoldView::paintWireframe(juce::Graphics& g)
+{
+    // 3-torus has no 2D surface: render the lattice as an edge wireframe with
+    // vertices lit by their curvature concentration (the heatmap), breathing
+    // with the conformal factor. A volumetric object you rotate and strike.
+    const int nv = tetMesh_.numVertices();
+    std::vector<juce::Point<float>> pts((size_t) nv);
+    std::vector<float> depth((size_t) nv);
+    float zmin = 1e9f, zmax = -1e9f;
+    for (int i = 0; i < nv; ++i) {
+        pts[(size_t) i] = project(i, depth[(size_t) i]);
+        zmin = std::min(zmin, depth[(size_t) i]);
+        zmax = std::max(zmax, depth[(size_t) i]);
+    }
+    const float zspan = std::max(zmax - zmin, 1e-3f);
+
+    juce::Path edges;  // one path, one stroke — cheap structural lattice
+    for (const auto& e : tetMesh_.edges) {
+        edges.startNewSubPath(pts[(size_t) e[0]]);
+        edges.lineTo(pts[(size_t) e[1]]);
+    }
+    g.setColour(juce::Colours::white.withAlpha(0.06f));
+    g.strokePath(edges, juce::PathStrokeType(0.5f));
+
+    // vertices lit by curvature concentration, far-to-near for depth cueing
+    std::vector<int> order((size_t) nv);
+    for (int i = 0; i < nv; ++i) order[(size_t) i] = i;
+    std::sort(order.begin(), order.end(),
+              [&](int a, int b) { return depth[(size_t) a] < depth[(size_t) b]; });
+    for (int i : order) {
+        const float t = (depth[(size_t) i] - zmin) / zspan;       // 0 far .. 1 near
+        const float heat = i < frame_.numVerts ? frame_.kDev[i] : 0.0f;
+        const float r = 1.2f + 2.0f * t;
+        g.setColour(curvatureColour(heat * 3.0f, 0.45f + 0.55f * t)
+                        .withAlpha(0.35f + 0.65f * t));
+        g.fillEllipse(pts[(size_t) i].x - r, pts[(size_t) i].y - r, 2 * r, 2 * r);
+    }
+
+    if (frame_.strikeVertex < nv) {
+        const auto sp = pts[(size_t) frame_.strikeVertex];
+        g.setColour(juce::Colour(0xFF7F77DD));
+        g.fillEllipse(sp.x - 6, sp.y - 6, 12, 12);
+        g.setColour(juce::Colour(0xFFEEEDFE));
+        g.drawEllipse(sp.x - 6, sp.y - 6, 12, 12, 1.5f);
+    }
+
+    g.setColour(juce::Colours::white.withAlpha(0.5f));
+    g.setFont(12.0f);
+    g.drawText("3-torus (4D) - drag rotate - wheel zoom - click a node to strike",
+               getLocalBounds().removeFromBottom(18), juce::Justification::centred);
+}
+
 void ManifoldView::mouseWheelMove(const juce::MouseEvent&,
                                   const juce::MouseWheelDetails& wheel)
 {
@@ -178,7 +264,7 @@ void ManifoldView::mouseUp(const juce::MouseEvent& e)
     // misfire on trackpads, which made strike picking feel unreliable
     if (e.getDistanceFromDragStart() > 6 || meshPresetId_ < 0)
         return;
-    const int nv = displayMesh_.numVertices();
+    const int nv = is4DView_ ? tetMesh_.numVertices() : displayMesh_.numVertices();
     int best = -1;
     float bestDist = 60.0f * 60.0f;
     for (int i = 0; i < nv; ++i) {

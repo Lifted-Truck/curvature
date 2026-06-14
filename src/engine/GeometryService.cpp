@@ -8,19 +8,37 @@
 
 namespace curv {
 
-void GeometryService::loadPreset(PresetId id, const char* genus2Obj, size_t genus2ObjSize)
+void GeometryService::loadPreset(PresetId id, const char* obj, size_t objSize)
 {
-    mesh_ = makePreset(id, genus2Obj, genus2ObjSize);
-    flow_ = std::make_unique<RicciFlow>(mesh_);
-    modes_ = solveModes(buildCotanLaplacian(mesh_), kMaxModes);
+    is4D_ = presetIs4D(id);
+    if (is4D_) {
+        tet_ = std::make_unique<TetManifold>(makeTetPreset(id));
+        flow_.reset();
+        mesh_ = Mesh();
+    } else {
+        mesh_ = makePreset(id, obj, objSize);
+        flow_ = std::make_unique<RicciFlow>(mesh_);
+        tet_.reset();
+    }
+    modes_ = solveModes(currentLaplacian(), kMaxModes);
     lambda_ = modes_.lambda;
     blendRemaining_ = 0;
     lambdaPreResolve_.resize(0);
 }
 
+LaplacianPair GeometryService::currentLaplacian() const
+{
+    return is4D_ ? tet_->currentLaplacian() : buildCotanLaplacian(mesh_);
+}
+
+int GeometryService::numVertices() const
+{
+    return is4D_ ? tet_->numVertices() : mesh_.numVertices();
+}
+
 int GeometryService::strikeVertex(float strikeParam) const
 {
-    const int n = mesh_.numVertices();
+    const int n = numVertices();
     return std::clamp(static_cast<int>(std::lround(strikeParam * (n - 1))), 0, n - 1);
 }
 
@@ -56,16 +74,16 @@ void GeometryService::fillFrame(SpectrumFrame& frame, int numModes, float strike
 
 void GeometryService::flowKick(double amplitude, unsigned seed)
 {
-    flow_->perturb(amplitude, seed);
-    flow_->writeFaceLengths(mesh_);
+    if (is4D_) tet_->perturb(amplitude, seed);
+    else { flow_->perturb(amplitude, seed); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 
 double GeometryService::flowStep(double dt, double direction)
 {
-    const double taken = flow_->step(dt, direction);
+    const double taken = is4D_ ? tet_->step(dt, direction) : flow_->step(dt, direction);
     if (taken > 0.0) {
-        flow_->writeFaceLengths(mesh_);
+        if (!is4D_) flow_->writeFaceLengths(mesh_);
         rayleighUpdate();
     }
     return taken;
@@ -73,28 +91,34 @@ double GeometryService::flowStep(double dt, double direction)
 
 void GeometryService::flowPress(float strikeParam, double amount, double dt, double sigma)
 {
-    flow_->press(strikeVertex(strikeParam), amount, dt, sigma);
-    flow_->writeFaceLengths(mesh_);
+    const int v = strikeVertex(strikeParam);
+    if (is4D_) tet_->press(v, amount, dt, sigma);
+    else { flow_->press(v, amount, dt, sigma); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 
 void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikeParam,
                                    int presetId) const
 {
-    const int nv = std::min(mesh_.numVertices(), kMaxVizVerts);
-    const Eigen::VectorXd kDev = flow_->curvatureDeviation();
-    // include the transient ripple so the spreading wave is visible
-    const Eigen::VectorXd uDev = flow_->logRadii() - flow_->logRadiiBase()
-                                 + flow_->rippleField();
-
+    const int nv = std::min(numVertices(), kMaxVizVerts);
     frame.numVerts = nv;
     frame.presetId = presetId;
     frame.strikeVertex = strikeVertex(strikeParam);
-    frame.curvatureErr = static_cast<float>(kDev.cwiseAbs().maxCoeff());
     frame.frameId = nextFrameId_++;
-    for (int i = 0; i < nv; ++i) {
-        frame.kDev[i] = static_cast<float>(kDev[i]);
-        frame.uDev[i] = static_cast<float>(uDev[i]);
+
+    if (is4D_) {
+        tet_->fillViz(frame.kDev, frame.uDev, nv);
+        frame.curvatureErr = static_cast<float>(tet_->curvatureError());
+    } else {
+        const Eigen::VectorXd kDev = flow_->curvatureDeviation();
+        // include the transient ripple so the spreading wave is visible
+        const Eigen::VectorXd uDev = flow_->logRadii() - flow_->logRadiiBase()
+                                     + flow_->rippleField();
+        frame.curvatureErr = static_cast<float>(kDev.cwiseAbs().maxCoeff());
+        for (int i = 0; i < nv; ++i) {
+            frame.kDev[i] = static_cast<float>(kDev[i]);
+            frame.uDev[i] = static_cast<float>(uDev[i]);
+        }
     }
 
     const int k = std::clamp(numModes, 1, std::min(kMaxModes, (int) lambda_.size()));
@@ -106,27 +130,30 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
 
 void GeometryService::strikeKick(float strikeParam, double amount, unsigned seed)
 {
-    flow_->strikeKick(strikeVertex(strikeParam), amount, seed);
-    flow_->writeFaceLengths(mesh_);
+    const int v = strikeVertex(strikeParam);
+    if (is4D_) tet_->strikeKick(v, amount, seed);
+    else { flow_->strikeKick(v, amount, seed); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 
 void GeometryService::rippleStrike(float strikeParam, double amount)
 {
-    flow_->rippleStrike(strikeVertex(strikeParam), amount);
-    flow_->writeFaceLengths(mesh_);
+    const int v = strikeVertex(strikeParam);
+    if (is4D_) tet_->rippleStrike(v, amount);
+    else { flow_->rippleStrike(v, amount); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 
 void GeometryService::rippleStep(double dt, double speed, double damp)
 {
-    flow_->rippleStep(dt, speed, damp);
-    flow_->writeFaceLengths(mesh_);
+    if (is4D_) tet_->rippleStep(dt, speed, damp);
+    else { flow_->rippleStep(dt, speed, damp); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 
 void GeometryService::flowElastic(double rate)
 {
+    if (is4D_) { tet_->relaxToBase(rate); rayleighUpdate(); return; }
     flow_->relaxToBase(rate);
     flow_->writeFaceLengths(mesh_);
     rayleighUpdate();
@@ -134,13 +161,14 @@ void GeometryService::flowElastic(double rate)
 
 double GeometryService::metricDeviation() const
 {
-    return (flow_->logRadii() - flow_->logRadiiBase()).cwiseAbs().maxCoeff();
+    return is4D_ ? tet_->metricDeviation()
+                 : (flow_->logRadii() - flow_->logRadiiBase()).cwiseAbs().maxCoeff();
 }
 
 void GeometryService::flowReset()
 {
-    flow_->reset();
-    flow_->writeFaceLengths(mesh_);
+    if (is4D_) tet_->reset();
+    else { flow_->reset(); flow_->writeFaceLengths(mesh_); }
     resolve();
     blendRemaining_ = 0;     // reset is a discontinuity by request: no blend
     lambda_ = modes_.lambda;
@@ -156,7 +184,7 @@ void GeometryService::rayleighUpdate()
     // rather than letting it reset the engine.
     LaplacianPair lap;
     try {
-        lap = buildCotanLaplacian(mesh_);
+        lap = currentLaplacian();
     } catch (...) {
         return;
     }
@@ -189,7 +217,7 @@ void GeometryService::resolve()
     LaplacianPair lap;
     ModeSet fresh;
     try {
-        lap = buildCotanLaplacian(mesh_);
+        lap = currentLaplacian();
         fresh = solveModes(lap, kMaxModes);
     } catch (...) {
         return;  // solve failed: coast on the previous modes

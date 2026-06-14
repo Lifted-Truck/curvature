@@ -11,6 +11,7 @@
 #include "../geometry/EigenSolver.h"
 #include "../geometry/Presets.h"
 #include "../geometry/RicciFlow.h"
+#include "../geometry/TetManifold.h"
 #include "SpectrumFrame.h"
 
 namespace curv {
@@ -36,7 +37,7 @@ public:
     // strike ripple: inject a propagating wave at the strike vertex, advance it
     void rippleStrike(float strikeParam, double amount);
     void rippleStep(double dt, double speed, double damp);
-    bool rippleActive() const { return flow_->rippleActive(); }
+    bool rippleActive() const { return is4D_ ? tet_->rippleActive() : flow_->rippleActive(); }
     // editor snapshot (geometry thread)
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;
@@ -47,24 +48,29 @@ public:
     // scheduled full eigensolve, mode-matched to the previous basis so
     // frame-to-frame trajectories stay continuous through the re-solve
     void resolve();
-    double curvatureError() const { return flow_->curvatureError(); }
-    double curvatureRms() const { return flow_->curvatureRms(); }
+    double curvatureError() const { return is4D_ ? tet_->curvatureError() : flow_->curvatureError(); }
+    double curvatureRms() const { return is4D_ ? tet_->curvatureRms() : flow_->curvatureRms(); }
 
     const Mesh& mesh() const { return mesh_; }
     const Eigen::VectorXd& lambda() const { return lambda_; }
     int strikeVertex(float strikeParam) const;
+    bool is4D() const { return is4D_; }
+    int numVertices() const;
 
 private:
     void rayleighUpdate();  // lambda_k <- (phi_k' L phi_k)/(phi_k' M phi_k)
+    LaplacianPair currentLaplacian() const;  // dispatches to the active backend
 
     static constexpr int kBlendFrames = 8;  // post-resolve reconciliation span
 
-    Mesh mesh_;
+    Mesh mesh_;                 // triangle mesh (2-manifold presets)
     ModeSet modes_;             // basis from the last full solve
     Eigen::VectorXd lambda_;    // current published eigenvalue estimates
     Eigen::VectorXd lambdaPreResolve_;
     int blendRemaining_ = 0;
-    std::unique_ptr<RicciFlow> flow_;
+    bool is4D_ = false;
+    std::unique_ptr<RicciFlow> flow_;       // 2-manifold backend
+    std::unique_ptr<TetManifold> tet_;      // 3-manifold (4D) backend
     mutable uint32_t nextFrameId_ = 1;
 };
 

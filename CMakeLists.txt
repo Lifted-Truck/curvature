@@ -35,6 +35,8 @@ add_library(curv_core STATIC
     src/geometry/Laplacian.cpp
     src/geometry/EigenSolver.cpp
     src/geometry/RicciFlow.cpp
+    src/geometry/TetMesh.cpp
+    src/geometry/TetManifold.cpp
     src/engine/GeometryService.cpp)
 target_include_directories(curv_core PUBLIC
     ${eigen_SOURCE_DIR}
@@ -60,7 +62,8 @@ enable_testing()
 add_executable(curv_tests
     tests/geometry_test.cpp
     tests/engine_test.cpp
-    tests/flow_test.cpp)
+    tests/flow_test.cpp
+    tests/tet_test.cpp)
 target_link_libraries(curv_tests PRIVATE curv_core Catch2::Catch2WithMain)
 target_compile_definitions(curv_tests PRIVATE
     CURV_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"

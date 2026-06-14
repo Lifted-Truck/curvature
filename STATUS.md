@@ -228,6 +228,25 @@ the instrument.
   a 3-manifold has no 2D surface — likely a slice or edge-cloud; flow would
   be conformal/Yamabe, not Ricci).
 
+## Round 14 (2026-06-14) — 4D object in the plugin (3-torus T^3)
+
+Julian auditioned the Python prototype and approved the port. Now playable.
+- **3D FEM Laplacian** (`geometry/TetMesh`): Freudenthal tet mesh of the
+  periodic cube, barycentric-gradient stiffness + lumped mass; per-tet
+  conformal scaling (stiffness*s, mass*s^3) makes it intrinsic/gesture-able.
+  Validated: PSD null mode, exact plane waves, eigenvalues vs Python (1e-6).
+- **TetManifold backend**: conformal factor + the full gesture vocabulary one
+  dimension up (press / strike kick / ripple / memory), with conformal
+  *diffusion* flow (relax smooths toward uniform, sharpen concentrates) in
+  place of Ricci. RicciFlow left untouched (zero regression risk).
+- **GeometryService** dispatches 2-manifold (RicciFlow) vs 4D (TetManifold)
+  via `is4D_`. Presets **"3-Torus (4D)"** and **"3-Torus aniso (4D)"** (12^3).
+- **Visualizer**: wireframe path — the lattice rendered as edges + nodes lit
+  by curvature concentration, breathing radially with the conformal factor,
+  rotatable, click-a-node to strike.
+- gates: 24 Catch2 cases (incl. 3-torus FEM PSD/plane-wave/Python-match),
+  pluginval 10, FFT oracle (2D intact), ASan clean, 30-min 4D flow soak clean.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

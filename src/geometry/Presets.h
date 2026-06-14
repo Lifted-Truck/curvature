@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Mesh.h"
+#include "TetMesh.h"
 
 namespace curv {
 
@@ -15,18 +16,20 @@ Mesh makeFlatTorus(int nx, int ny, double a, double b);
 Mesh loadObjFromString(const char* data, size_t size, const std::string& name);
 
 enum class PresetId { Icosphere = 0, Torus11, TorusGolden, TorusString, Genus2,
-                      Mandelbulb, Count };
+                      Mandelbulb, Torus3D, Torus3DAniso, Count };
 
 inline const char* presetName(PresetId id)
 {
     switch (id) {
-        case PresetId::Icosphere:   return "Icosphere (bell)";
-        case PresetId::Torus11:     return "Torus 1:1 (lattice)";
-        case PresetId::TorusGolden: return "Torus 1:1.618 (lattice)";
-        case PresetId::TorusString: return "Torus 8:1 (harmonic)";
-        case PresetId::Genus2:      return "Genus 2 (shimmer)";
-        case PresetId::Mandelbulb:  return "Mandelbulb (alien)";
-        default:                    return "?";
+        case PresetId::Icosphere:    return "Icosphere (bell)";
+        case PresetId::Torus11:      return "Torus 1:1 (lattice)";
+        case PresetId::TorusGolden:  return "Torus 1:1.618 (lattice)";
+        case PresetId::TorusString:  return "Torus 8:1 (harmonic)";
+        case PresetId::Genus2:       return "Genus 2 (shimmer)";
+        case PresetId::Mandelbulb:   return "Mandelbulb (alien)";
+        case PresetId::Torus3D:      return "3-Torus (4D)";
+        case PresetId::Torus3DAniso: return "3-Torus aniso (4D)";
+        default:                     return "?";
     }
 }
 
@@ -34,6 +37,20 @@ inline const char* presetName(PresetId id)
 inline bool presetNeedsObj(PresetId id)
 {
     return id == PresetId::Genus2 || id == PresetId::Mandelbulb;
+}
+
+// true for 3-manifold (4D) presets — handled by TetManifold, not RicciFlow
+inline bool presetIs4D(PresetId id)
+{
+    return id == PresetId::Torus3D || id == PresetId::Torus3DAniso;
+}
+
+// build the tet mesh for a 4D preset
+inline TetMesh makeTetPreset(PresetId id)
+{
+    if (id == PresetId::Torus3DAniso)
+        return makeFlatTorus3(12, 12, 12, 1.0, 1.32, 1.71);
+    return makeFlatTorus3(12, 12, 12, 1.0, 1.0, 1.0);
 }
 
 // OBJ-based presets take their mesh asset (plugin uses BinaryData, tools read

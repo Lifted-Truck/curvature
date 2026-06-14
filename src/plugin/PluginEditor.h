@@ -35,9 +35,14 @@ private:
     void rebuildMeshIfNeeded(int presetId);
     juce::Point<float> project(int vi, float& depth) const;
 
+    void paintSurface(juce::Graphics& g);    // 2-manifold: shaded triangles
+    void paintWireframe(juce::Graphics& g);  // 3-manifold (4D): lattice wireframe
+
     CurvSynthProcessor& proc_;
     VizFrame frame_;
     Mesh displayMesh_;
+    TetMesh tetMesh_;                         // 4D display geometry
+    bool is4DView_ = false;
     std::vector<std::array<float, 3>> vertexNormals_;
     int meshPresetId_ = -1;
     float yaw_ = 0.6f, pitch_ = 0.25f;
