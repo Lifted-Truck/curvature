@@ -198,6 +198,19 @@ the instrument.
   clamp +/-0.6 -> +/-1.0 (degenerate combos just coast now, so safe to push).
 - gates: 21 Catch2 cases, pluginval 10, FFT oracle <1 cent, ASan + TSan clean.
 
+## Round 12 (2026-06-14) — Mandelbulb preset
+
+- New **Mandelbulb (alien)** preset: marching-cubes the mandelbulb escape
+  field (power 8), largest connected component, Taubin-smoothed, ~3053 verts,
+  genus 4. Spiky self-similar geometry -> dense clustered/inharmonic spectrum
+  with localized eigenfunctions (hyper-expressive strike point; SHARPEN goes
+  alien). `prototype/meshes.py::mandelbulb`, committed as
+  `assets/manifolds/mandelbulb.obj` + baked into the plugin via BinaryData.
+- Presets are now OBJ-aware generally (`presetNeedsObj`); plugin/editor/tools
+  select the right asset (genus2 vs mandelbulb).
+- gates: 21 Catch2 cases incl. mandelbulb eigenvalues vs Python (1e-6),
+  pluginval 10, FFT oracle <1 cent, ASan clean.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

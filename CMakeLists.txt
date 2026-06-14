@@ -75,7 +75,9 @@ if(CURV_BUILD_PLUGIN)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(juce)
 
-    juce_add_binary_data(CurvAssets SOURCES assets/manifolds/genus2.obj)
+    juce_add_binary_data(CurvAssets SOURCES
+        assets/manifolds/genus2.obj
+        assets/manifolds/mandelbulb.obj)
 
     juce_add_plugin(curvsynth_plugin
         PRODUCT_NAME "curvsynth"

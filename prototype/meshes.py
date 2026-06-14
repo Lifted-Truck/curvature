@@ -221,6 +221,85 @@ def _taubin_smooth(V: np.ndarray, F: np.ndarray, iters: int = 12,
     return V, F
 
 
+# ---------------------------------------------------------------- mandelbulb
+
+def mandelbulb(grid: int = 64, power: int = 8, iters: int = 6, step_size: int = 1) -> Mesh:
+    """Genus-0 mandelbulb isosurface: marching cubes on a signed escape field,
+    Taubin-smoothed. Spiky, self-similar geometry -> strongly localized
+    eigenfunctions, so the strike point becomes hyper-expressive and SHARPEN
+    goes alien. The discrete object is the instrument; we don't care about
+    fractal fidelity, only that it's a valid closed surface."""
+    from skimage import measure
+
+    lim = 1.25
+    xs = np.linspace(-lim, lim, grid)
+    X, Y, Z = np.meshgrid(xs, xs, xs, indexing="ij")
+    pos = np.stack([X.ravel(), Y.ravel(), Z.ravel()], axis=1)
+
+    z = pos.copy()
+    dr = np.ones(len(pos))
+    alive = np.ones(len(pos), dtype=bool)  # still inside (never escaped)
+    for _ in range(iters):
+        r = np.linalg.norm(z, axis=1)
+        alive &= r <= 2.0                  # freeze escaped points (no overflow)
+        rr = np.clip(r, 1e-9, 2.0)
+        theta = np.arccos(np.clip(z[:, 2] / rr, -1, 1)) * power
+        phi = np.arctan2(z[:, 1], z[:, 0]) * power
+        dr_new = rr ** (power - 1) * power * dr + 1.0
+        zr = rr ** power
+        z_new = zr[:, None] * np.stack([
+            np.sin(theta) * np.cos(phi),
+            np.sin(theta) * np.sin(phi),
+            np.cos(theta),
+        ], axis=1) + pos
+        z = np.where(alive[:, None], z_new, z)   # only advance live points
+        dr = np.where(alive, dr_new, dr)
+
+    r = np.clip(np.linalg.norm(z, axis=1), 1e-9, 1e6)
+    de = 0.5 * np.log(r) * r / dr                  # distance estimate (>=0 outside)
+    field = np.where(alive, -np.abs(de) - 1e-3, np.abs(de))  # signed: <0 inside
+    field = field.reshape((grid, grid, grid))
+
+    spacing = (xs[1] - xs[0],) * 3
+    verts, faces, _, _ = measure.marching_cubes(field, level=0.0, spacing=spacing,
+                                                step_size=step_size)
+    verts, faces = _largest_component(verts.astype(np.float64), faces.astype(np.int64))
+    verts = verts - verts.mean(axis=0)
+    verts /= np.linalg.norm(verts, axis=1).max()   # normalize to ~unit radius
+    verts, faces = _taubin_smooth(verts, faces, iters=8)
+
+    mesh = Mesh("mandelbulb", verts, faces)
+    assert mesh.euler_characteristic() % 2 == 0, "mandelbulb not a closed surface"
+    return mesh
+
+
+def _largest_component(V: np.ndarray, F: np.ndarray):
+    """Keep only the largest connected component (drop marching-cubes specks)
+    and remove now-unused vertices."""
+    n = V.shape[0]
+    parent = np.arange(n)
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for tri in F:
+        ra, rb, rc = find(tri[0]), find(tri[1]), find(tri[2])
+        parent[rb] = ra
+        parent[rc] = ra
+    roots = np.array([find(i) for i in range(n)])
+    labels, counts = np.unique(roots, return_counts=True)
+    keep_root = labels[np.argmax(counts)]
+    keep = roots == keep_root
+
+    remap = -np.ones(n, dtype=np.int64)
+    remap[keep] = np.arange(int(keep.sum()))
+    Fk = F[np.all(keep[F], axis=1)]
+    return V[keep], remap[Fk]
+
+
 # ---------------------------------------------------------------- strike points
 
 def strike_points(mesh: Mesh, count: int = 3) -> list[int]:

@@ -71,16 +71,19 @@ int main(int argc, char** argv)
     const int sr = std::stoi(get("sr", "48000"));
     const std::string out = get("out", "render.wav");
     const std::string genus2Path = get("genus2-obj", "assets/manifolds/genus2.obj");
+    const std::string mandelbulbPath = get("mandelbulb-obj", "assets/manifolds/mandelbulb.obj");
     const int flowMode = std::stoi(get("flow", "0"));
     const float flowRate = std::stof(get("flow-rate", "0.5"));
     const double kickAmp = std::stod(get("kick", "0"));
     const float bow = std::stof(get("bow", "0"));
 
     std::string objData;
-    if (preset == (int) curv::PresetId::Genus2) {
-        std::ifstream f(genus2Path);
+    if (curv::presetNeedsObj((curv::PresetId) preset)) {
+        const std::string path = preset == (int) curv::PresetId::Mandelbulb
+                                     ? mandelbulbPath : genus2Path;
+        std::ifstream f(path);
         if (!f) {
-            std::cerr << "cannot open " << genus2Path << "\n";
+            std::cerr << "cannot open " << path << "\n";
             return 1;
         }
         objData.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());

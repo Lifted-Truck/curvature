@@ -33,8 +33,13 @@ void ManifoldView::rebuildMeshIfNeeded(int presetId)
 {
     if (presetId == meshPresetId_)
         return;
-    displayMesh_ = makePreset((PresetId) presetId,
-                              BinaryData::genus2_obj, (size_t) BinaryData::genus2_objSize);
+    const char* obj = BinaryData::genus2_obj;
+    size_t objSize = (size_t) BinaryData::genus2_objSize;
+    if ((PresetId) presetId == PresetId::Mandelbulb) {
+        obj = BinaryData::mandelbulb_obj;
+        objSize = (size_t) BinaryData::mandelbulb_objSize;
+    }
+    displayMesh_ = makePreset((PresetId) presetId, obj, objSize);
     meshPresetId_ = presetId;
     faceOrder_.resize(displayMesh_.F.size());
 

@@ -157,8 +157,16 @@ void CurvSynthProcessor::run()
         try {
 
         if (manifold != lastManifold) {
-            geometry_.loadPreset((PresetId) manifold,
-                                 BinaryData::genus2_obj, (size_t) BinaryData::genus2_objSize);
+            const char* obj = nullptr;
+            size_t objSize = 0;
+            if ((PresetId) manifold == PresetId::Genus2) {
+                obj = BinaryData::genus2_obj;
+                objSize = (size_t) BinaryData::genus2_objSize;
+            } else if ((PresetId) manifold == PresetId::Mandelbulb) {
+                obj = BinaryData::mandelbulb_obj;
+                objSize = (size_t) BinaryData::mandelbulb_objSize;
+            }
+            geometry_.loadPreset((PresetId) manifold, obj, objSize);
             flowSinceResolve = 0.0;
             publish = true;
         }

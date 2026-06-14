@@ -78,10 +78,10 @@ TEST_CASE("eigenvalues match Phase 0 Python within tolerance")
     checkAgainstPython(makeFlatTorus(32, 24, 1.0, 1.0), "torus_1x1", 1e-8);
     checkAgainstPython(makeFlatTorus(32, 24, 1.0, 1.618), "torus_1x1p618", 1e-8);
     checkAgainstPython(makeFlatTorus(96, 12, 8.0, 1.0), "torus_8x1", 1e-8);
-    checkAgainstPython(loadObjFromString(readFile(std::string(CURV_ASSETS_DIR) + "/manifolds/genus2.obj").c_str(),
-                                         readFile(std::string(CURV_ASSETS_DIR) + "/manifolds/genus2.obj").size(),
-                                         "genus2"),
-                       "genus2", 1e-6);
+    const auto g2 = readFile(std::string(CURV_ASSETS_DIR) + "/manifolds/genus2.obj");
+    checkAgainstPython(loadObjFromString(g2.c_str(), g2.size(), "genus2"), "genus2", 1e-6);
+    const auto mb = readFile(std::string(CURV_ASSETS_DIR) + "/manifolds/mandelbulb.obj");
+    checkAgainstPython(loadObjFromString(mb.c_str(), mb.size(), "mandelbulb"), "mandelbulb", 1e-6);
 }
 
 TEST_CASE("8:1 torus produces a harmonic series (geometry-as-harmonicity)")

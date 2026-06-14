@@ -117,14 +117,15 @@ Mesh loadObjFromString(const char* data, size_t size, const std::string& name)
     return m;
 }
 
-Mesh makePreset(PresetId id, const char* genus2Obj, size_t genus2ObjSize)
+Mesh makePreset(PresetId id, const char* obj, size_t objSize)
 {
     switch (id) {
         case PresetId::Icosphere:   return makeIcosphere(3);
         case PresetId::Torus11:     return makeFlatTorus(32, 24, 1.0, 1.0);
         case PresetId::TorusGolden: return makeFlatTorus(32, 24, 1.0, 1.618);
         case PresetId::TorusString: return makeFlatTorus(96, 12, 8.0, 1.0);
-        case PresetId::Genus2:      return loadObjFromString(genus2Obj, genus2ObjSize, "genus2");
+        case PresetId::Genus2:      return loadObjFromString(obj, objSize, "genus2");
+        case PresetId::Mandelbulb:  return loadObjFromString(obj, objSize, "mandelbulb");
         default:                    throw std::runtime_error("bad preset id");
     }
 }
