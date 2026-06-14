@@ -19,9 +19,21 @@ const int kPerms[6][3] = { { 0, 1, 2 }, { 0, 2, 1 }, { 1, 0, 2 },
 
 TetMesh makeFlatTorus3(int nx, int ny, int nz, double a, double b, double c)
 {
+    const double basis[3][3] = { { a, 0, 0 }, { 0, b, 0 }, { 0, 0, c } };  // columns
+    return makeLatticeTorus3(nx, ny, nz, basis);
+}
+
+TetMesh makeLatticeTorus3(int nx, int ny, int nz, const double basis[3][3])
+{
     TetMesh m;
-    m.nx = nx; m.ny = ny; m.nz = nz; m.a = a; m.b = b; m.c = c;
-    const double dx = a / nx, dy = b / ny, dz = c / nz;
+    m.nx = nx; m.ny = ny; m.nz = nz;
+    for (int r = 0; r < 3; ++r)
+        for (int col = 0; col < 3; ++col)
+            m.lat[r][col] = basis[r][col];
+    // bounding extents (for display centering / radius)
+    m.a = std::abs(basis[0][0]) + std::abs(basis[0][1]) + std::abs(basis[0][2]);
+    m.b = std::abs(basis[1][0]) + std::abs(basis[1][1]) + std::abs(basis[1][2]);
+    m.c = std::abs(basis[2][0]) + std::abs(basis[2][1]) + std::abs(basis[2][2]);
 
     auto vid = [&](int i, int j, int k) {
         return (((i % nx + nx) % nx) * ny + ((j % ny + ny) % ny)) * nz + ((k % nz + nz) % nz);
@@ -30,8 +42,14 @@ TetMesh makeFlatTorus3(int nx, int ny, int nz, double a, double b, double c)
     m.V.resize((size_t) nx * ny * nz);
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
-            for (int k = 0; k < nz; ++k)
-                m.V[(size_t) vid(i, j, k)] = { i * dx, j * dy, k * dz };
+            for (int k = 0; k < nz; ++k) {
+                const double fi = (double) i / nx, fj = (double) j / ny, fk = (double) k / nz;
+                m.V[(size_t) vid(i, j, k)] = {
+                    basis[0][0] * fi + basis[0][1] * fj + basis[0][2] * fk,
+                    basis[1][0] * fi + basis[1][1] * fj + basis[1][2] * fk,
+                    basis[2][0] * fi + basis[2][1] * fj + basis[2][2] * fk,
+                };
+            }
 
     std::map<std::pair<int, int>, int> edgeIndex;
     auto addEdge = [&](int u, int v) {
@@ -71,8 +89,14 @@ TetMesh makeFlatTorus3(int nx, int ny, int nz, double a, double b, double c)
 LaplacianPair buildTetLaplacian(const TetMesh& mesh, const Eigen::VectorXd& u)
 {
     const int n = mesh.numVertices();
-    const double box[3] = { mesh.a, mesh.b, mesh.c };
     const bool conformal = u.size() == n;
+
+    // periodic minimal image uses the lattice basis: e -= lat * round(lat^-1 e)
+    Eigen::Matrix3d lat;
+    for (int r = 0; r < 3; ++r)
+        for (int col = 0; col < 3; ++col)
+            lat(r, col) = mesh.lat[r][col];
+    const Eigen::Matrix3d latInv = lat.inverse();
 
     std::vector<Eigen::Triplet<double>> trips;
     trips.reserve(mesh.tets.size() * 16);
@@ -83,11 +107,10 @@ LaplacianPair buildTetLaplacian(const TetMesh& mesh, const Eigen::VectorXd& u)
         Eigen::Matrix3d M3;  // columns = edge vectors from p0 (minimal image)
         for (int s = 0; s < 3; ++s) {
             const auto& ps = mesh.V[(size_t) tet[s + 1]];
-            for (int d = 0; d < 3; ++d) {
-                double e = ps[d] - p0[d];
-                e -= box[d] * std::round(e / box[d]);  // periodic minimal image
-                M3(d, s) = e;
-            }
+            Eigen::Vector3d e(ps[0] - p0[0], ps[1] - p0[1], ps[2] - p0[2]);
+            Eigen::Vector3d f = latInv * e;            // fractional coords
+            for (int d = 0; d < 3; ++d) f[d] -= std::round(f[d]);
+            M3.col(s) = lat * f;                       // minimal-image edge vector
         }
         const double det = M3.determinant();
         const double vol = std::abs(det) / 6.0;

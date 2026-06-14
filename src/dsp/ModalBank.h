@@ -19,8 +19,10 @@ struct DampingParams {
     float t60 = 5.0f;          // seconds, global
     float tilt = 0.7f;         // decay_k = t60 * (f_1/f_k)^tilt; may be negative
     float releaseT60 = 0.25f;  // after note-off
-    float comb = 0.0f;         // 0..1: every other mode's T60 collapses —
-                               // selective absorption no material has
+    float comb = 0.0f;         // 0..1: notch depth — selective per-mode
+                               // absorption no material has (extreme at top)
+    float combFreq = 0.5f;     // 0..1: notch spacing over mode index
+                               // (low = wide notches, high = every other mode)
 };
 
 class ModalVoice {
@@ -215,8 +217,14 @@ private:
             float t60 = releasing_
                 ? std::min(damping_.releaseT60, damping_.t60)
                 : damping_.t60 * std::pow(f1_ / freq_[m], damping_.tilt);
-            if ((m & 1) != 0)
-                t60 *= 1.0f - 0.97f * damping_.comb;
+            if (damping_.comb > 0.0f) {
+                // comb notch over mode index: period set by combFreq (wide
+                // notches at low freq, every-other-mode at high). Depth is
+                // near-total at the top (x0.002) — far more extreme than before.
+                const float period = 2.0f + 14.0f * (1.0f - damping_.combFreq);
+                const float kill = 0.5f - 0.5f * std::cos(2.0f * (float) M_PI * m / period);
+                t60 *= 1.0f - 0.998f * damping_.comb * kill;
+            }
             t60 = std::max(t60, 1e-3f);
             const float r = std::exp(-lnK / (t60 * static_cast<float>(sr_)));
             const float w = 2.0f * static_cast<float>(M_PI)

@@ -17,7 +17,8 @@ namespace curv {
 
 struct TetMesh {
     int nx = 0, ny = 0, nz = 0;
-    double a = 1.0, b = 1.0, c = 1.0;
+    double a = 1.0, b = 1.0, c = 1.0;          // bounding extents (display)
+    double lat[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };  // period basis (columns)
     std::vector<std::array<double, 3>> V;      // fundamental-domain positions (display)
     std::vector<std::array<int, 4>> tets;      // periodic vertex indices
     std::vector<std::array<int, 2>> edges;     // unique edges (display wireframe + smoothing)
@@ -26,7 +27,11 @@ struct TetMesh {
     int numVertices() const { return static_cast<int>(V.size()); }
 };
 
+// orthogonal lattice (period a x b x c)
 TetMesh makeFlatTorus3(int nx, int ny, int nz, double a, double b, double c);
+
+// general (possibly oblique) lattice: columns of basis are the period vectors
+TetMesh makeLatticeTorus3(int nx, int ny, int nz, const double basis[3][3]);
 
 // FEM Laplacian (PSD, L*1 = 0) + lumped mass for the given per-vertex
 // conformal factor u (edge geometry scaled by exp((u_i+u_j)/2)); u empty => flat.

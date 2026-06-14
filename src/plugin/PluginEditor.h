@@ -101,6 +101,7 @@ private:
     std::vector<std::unique_ptr<SA>> sliderAtts_;
     std::unique_ptr<CA> manifoldAtt_, flowAtt_, voiceAtt_;
     std::unique_ptr<BA> kickAtt_, resetAtt_;
+    uint32_t lastVizId_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurvSynthEditor)
 };

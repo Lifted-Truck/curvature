@@ -247,6 +247,35 @@ Julian auditioned the Python prototype and approved the port. Now playable.
 - gates: 24 Catch2 cases (incl. 3-torus FEM PSD/plane-wave/Python-match),
   pluginval 10, FFT oracle (2D intact), ASan clean, 30-min 4D flow soak clean.
 
+## Round 15 (2026-06-14) — viz lag, oblique 3-torus, comb upgrade, manual extremity
+
+- **Wireframe lag fixed** (it was render cost, not debug mode): the editor now
+  repaints the manifold view only when geometry changes (frameId), and the
+  4D wireframe draws a subsampled ~8^3 lattice instead of all ~1700 nodes +
+  thousands of tet edges. Sound still uses the full 12^3 mesh.
+- **Oblique 3-torus preset** ("3-Torus oblique (4D)"): TetMesh generalized to
+  an arbitrary lattice basis (rhombohedral / "isosceles", equal-length basis
+  vectors at 60deg); generalized periodic minimal-image. Distinct shell
+  structure from the cube — audibly different. Plane-wave-exactness test added.
+- **Comb upgraded**: near-total notches at the top (x0.002, was x0.03) +
+  **Comb Freq** param (notch spacing over mode index, wide .. every-other-mode),
+  mirrored in the spectrum view.
+- **Manual sharpness reaches further**: target 0.5 -> 0.9*sharp^2 with a
+  stall guard that settles at the metric's actual ceiling (resolve() already
+  coasts, so the limit no longer crashes).
+- gates: 25 Catch2 cases, pluginval 10, FFT oracle, ASan clean.
+
+## Next big item: PERPETUALLY-MORPHING OBJECT (Julian, round 15)
+
+Julian wants an object whose metric continuously changes so the sound never
+settles (his "continually shifting" mandelbulb intuition; the engine is
+intrinsic so a static embedding rotation wouldn't change the sound — the
+*metric* must move). Plan: a "Morph" gesture = a conformal deformation that
+perpetually travels across the manifold (e.g. a bump orbiting the torus minor
+circle), speed+direction from a bipolar slider; generalizes to a traveling
+deformation along a vertex path / a standing-wave LFO on the conformal factor.
+Its own focused run. (Particle-field resonance = separate engine/project.)
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

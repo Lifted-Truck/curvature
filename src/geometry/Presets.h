@@ -16,7 +16,7 @@ Mesh makeFlatTorus(int nx, int ny, double a, double b);
 Mesh loadObjFromString(const char* data, size_t size, const std::string& name);
 
 enum class PresetId { Icosphere = 0, Torus11, TorusGolden, TorusString, Genus2,
-                      Mandelbulb, Torus3D, Torus3DAniso, Count };
+                      Mandelbulb, Torus3D, Torus3DAniso, Torus3DOblique, Count };
 
 inline const char* presetName(PresetId id)
 {
@@ -27,9 +27,10 @@ inline const char* presetName(PresetId id)
         case PresetId::TorusString:  return "Torus 8:1 (harmonic)";
         case PresetId::Genus2:       return "Genus 2 (shimmer)";
         case PresetId::Mandelbulb:   return "Mandelbulb (alien)";
-        case PresetId::Torus3D:      return "3-Torus (4D)";
-        case PresetId::Torus3DAniso: return "3-Torus aniso (4D)";
-        default:                     return "?";
+        case PresetId::Torus3D:       return "3-Torus (4D)";
+        case PresetId::Torus3DAniso:  return "3-Torus aniso (4D)";
+        case PresetId::Torus3DOblique:return "3-Torus oblique (4D)";
+        default:                      return "?";
     }
 }
 
@@ -42,7 +43,8 @@ inline bool presetNeedsObj(PresetId id)
 // true for 3-manifold (4D) presets — handled by TetManifold, not RicciFlow
 inline bool presetIs4D(PresetId id)
 {
-    return id == PresetId::Torus3D || id == PresetId::Torus3DAniso;
+    return id == PresetId::Torus3D || id == PresetId::Torus3DAniso
+           || id == PresetId::Torus3DOblique;
 }
 
 // build the tet mesh for a 4D preset
@@ -50,6 +52,16 @@ inline TetMesh makeTetPreset(PresetId id)
 {
     if (id == PresetId::Torus3DAniso)
         return makeFlatTorus3(12, 12, 12, 1.0, 1.32, 1.71);
+    if (id == PresetId::Torus3DOblique) {
+        // equal-length basis vectors at oblique (60 deg) angles — a
+        // rhombohedral/"isosceles" lattice; the sheared reciprocal lattice
+        // gives a different shell structure than the cubic one (columns)
+        const double s = 0.5, h = 0.8660254, t = 0.8164966, u = 0.2886751;
+        const double basis[3][3] = { { 1.0, s,   s   },
+                                     { 0.0, h,   u   },
+                                     { 0.0, 0.0, t   } };
+        return makeLatticeTorus3(12, 12, 12, basis);
+    }
     return makeFlatTorus3(12, 12, 12, 1.0, 1.0, 1.0);
 }
 

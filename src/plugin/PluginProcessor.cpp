@@ -32,6 +32,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pPress_ = apvts.getRawParameterValue("press");
     pPressSize_ = apvts.getRawParameterValue("presssize");
     pComb_ = apvts.getRawParameterValue("comb");
+    pCombFreq_ = apvts.getRawParameterValue("combfreq");
     pImpulse_ = apvts.getRawParameterValue("impulse");
     pMemory_ = apvts.getRawParameterValue("memory");
     pMemRate_ = apvts.getRawParameterValue("memrate");
@@ -100,9 +101,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // press bump falloff radius: pointy dent .. broad swell
     layout.add(std::make_unique<P>("presssize", "Press Size",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
-    // comb = selective absorption: every other mode's decay collapses
+    // comb = selective per-mode absorption (near-total notches at the top)
     layout.add(std::make_unique<P>("comb", "Damp Comb",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // comb frequency = notch spacing over mode index (wide .. every-other-mode)
+    layout.add(std::make_unique<P>("combfreq", "Comb Freq",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f));
     // mallet impulse level, independent of bow (0 + bow = purely bowed)
     layout.add(std::make_unique<P>("impulse", "Impulse",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
@@ -140,6 +144,8 @@ void CurvSynthProcessor::run()
     unsigned kickSeed = 1;
     double flowSinceResolve = 0.0;
     double manualTarget = 0.0;
+    float manualLastSharp = -1.0f;
+    bool manualStalled = false;
     constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
                                               // bounds fast-path drift regardless of rate
     constexpr double kMaxDt = 0.25;           // per-step flow time at rate 1.0
@@ -228,26 +234,29 @@ void CurvSynthProcessor::run()
 
         bool manualMode = (flowMode == 3);
         if (manualMode && flowRate > 0.0f) {
-            // Manual = a bidirectional position control that scrubs the object
-            // along the Ricci flow. Up runs reverse flow (sharpen, concentrate
-            // curvature); down runs FORWARD flow (relax — literally walking
-            // back down the flow toward uniform curvature, smoothing). Driven
-            // on RMS curvature (smooth — unlike max|K-Kbar|, which hops between
-            // vertices and was the jitter source) toward a reachable target
-            // (plateau ~0.6-0.78 across presets, so 0.5 is always reachable ->
-            // settles, no endless chase at full-up). Gated by Flow Rate.
+            // Manual = a bidirectional position control scrubbing along the
+            // flow: up sharpens (reverse), down smooths (forward). Driven on
+            // RMS curvature (smooth, no vertex-hopping jitter). The target is
+            // ambitious (0.9*sharp^2 — past the reachable plateau) so it pushes
+            // to the metric's actual ceiling; a stall guard settles it there
+            // instead of churning, and resolve() coasts so the limit never
+            // crashes. Gated by Flow Rate.
             const float sharp = pSharpness_->load();
-            const double target = 0.5 * sharp * sharp;
+            const double target = 0.9 * sharp * sharp;
             manualTarget += 0.2 * (target - manualTarget);  // light slew
             const double rms = geometry_.curvatureRms();
             const double err = manualTarget - rms;
             const double dt = kMaxDt * flowRate * flowRate * std::min(1.0, std::abs(err) / 0.2);
-            if (err > 0.01) {        // too smooth: reverse flow up toward target
+            if (sharp != manualLastSharp) { manualStalled = false; manualLastSharp = sharp; }
+            if (err > 0.01 && !manualStalled) {  // too smooth: reverse flow up
                 if (rms < 0.01)
                     geometry_.flowKick(0.05, kickSeed++);  // seed at equilibrium
                 flowSinceResolve += geometry_.flowStep(dt, -1.0);
+                if (geometry_.curvatureRms() <= rms + 1e-4)
+                    manualStalled = true;  // hit the metric's ceiling — hold here
                 publish = true;
             } else if (err < -0.01) {  // too sharp: forward flow back down
+                manualStalled = false;
                 flowSinceResolve += geometry_.flowStep(dt, +1.0);
                 publish = true;
             }
@@ -333,7 +342,8 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         currentFrame_ = *latest;
     const bool haveSpectrum = currentFrame_.numModes > 0 || latest != nullptr;
 
-    voices_.setDamping({ pT60_->load(), pTilt_->load(), pRelease_->load(), pComb_->load() });
+    voices_.setDamping({ pT60_->load(), pTilt_->load(), pRelease_->load(),
+                         pComb_->load(), pCombFreq_->load() });
     voices_.setGlobalFrame(((int) pVoiceMode_->load() == 1 && currentFrame_.numModes > 0)
                                ? &currentFrame_ : nullptr);
     voices_.setBow(pBow_->load());

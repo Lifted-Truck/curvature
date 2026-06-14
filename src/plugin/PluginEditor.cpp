@@ -187,44 +187,58 @@ void ManifoldView::paint(juce::Graphics& g)
 
 void ManifoldView::paintWireframe(juce::Graphics& g)
 {
-    // 3-torus has no 2D surface: render the lattice as an edge wireframe with
-    // vertices lit by their curvature concentration (the heatmap), breathing
-    // with the conformal factor. A volumetric object you rotate and strike.
-    const int nv = tetMesh_.numVertices();
-    std::vector<juce::Point<float>> pts((size_t) nv);
-    std::vector<float> depth((size_t) nv);
+    // 3-torus has no 2D surface. Render a SUBSAMPLED lattice (a coarse grid of
+    // nodes lit by curvature concentration, breathing with the conformal
+    // factor) so rotation stays smooth — drawing all ~1700 nodes + thousands
+    // of tet edges every frame was the lag. The sound still uses the full mesh.
+    const int nx = tetMesh_.nx, ny = tetMesh_.ny, nz = tetMesh_.nz;
+    const int step = std::max(1, nx / 8);  // ~8^3 display nodes
+    auto vid = [&](int i, int j, int k) { return ((i % nx) * ny + (j % ny)) * nz + (k % nz); };
+
+    auto node = [&](int i, int j, int k, juce::Point<float>& p, float& d) {
+        p = project(vid(i, j, k), d);
+    };
+
+    // structural grid edges between sampled nodes, in one stroke
+    juce::Path edges;
+    juce::Point<float> p, q; float dd;
+    for (int i = 0; i < nx; i += step)
+        for (int j = 0; j < ny; j += step)
+            for (int k = 0; k < nz; k += step) {
+                node(i, j, k, p, dd);
+                node(i + step, j, k, q, dd); edges.startNewSubPath(p); edges.lineTo(q);
+                node(i, j + step, k, q, dd); edges.startNewSubPath(p); edges.lineTo(q);
+                node(i, j, k + step, q, dd); edges.startNewSubPath(p); edges.lineTo(q);
+            }
+    g.setColour(juce::Colours::white.withAlpha(0.07f));
+    g.strokePath(edges, juce::PathStrokeType(0.6f));
+
+    // nodes, far-to-near, lit by curvature concentration
+    struct Node { juce::Point<float> p; float depth; int idx; };
+    std::vector<Node> nodes;
+    for (int i = 0; i < nx; i += step)
+        for (int j = 0; j < ny; j += step)
+            for (int k = 0; k < nz; k += step) {
+                const int idx = vid(i, j, k);
+                juce::Point<float> pp; float d;
+                node(i, j, k, pp, d);
+                nodes.push_back({ pp, d, idx });
+            }
     float zmin = 1e9f, zmax = -1e9f;
-    for (int i = 0; i < nv; ++i) {
-        pts[(size_t) i] = project(i, depth[(size_t) i]);
-        zmin = std::min(zmin, depth[(size_t) i]);
-        zmax = std::max(zmax, depth[(size_t) i]);
-    }
+    for (const auto& nd : nodes) { zmin = std::min(zmin, nd.depth); zmax = std::max(zmax, nd.depth); }
     const float zspan = std::max(zmax - zmin, 1e-3f);
-
-    juce::Path edges;  // one path, one stroke — cheap structural lattice
-    for (const auto& e : tetMesh_.edges) {
-        edges.startNewSubPath(pts[(size_t) e[0]]);
-        edges.lineTo(pts[(size_t) e[1]]);
-    }
-    g.setColour(juce::Colours::white.withAlpha(0.06f));
-    g.strokePath(edges, juce::PathStrokeType(0.5f));
-
-    // vertices lit by curvature concentration, far-to-near for depth cueing
-    std::vector<int> order((size_t) nv);
-    for (int i = 0; i < nv; ++i) order[(size_t) i] = i;
-    std::sort(order.begin(), order.end(),
-              [&](int a, int b) { return depth[(size_t) a] < depth[(size_t) b]; });
-    for (int i : order) {
-        const float t = (depth[(size_t) i] - zmin) / zspan;       // 0 far .. 1 near
-        const float heat = i < frame_.numVerts ? frame_.kDev[i] : 0.0f;
-        const float r = 1.2f + 2.0f * t;
-        g.setColour(curvatureColour(heat * 3.0f, 0.45f + 0.55f * t)
-                        .withAlpha(0.35f + 0.65f * t));
-        g.fillEllipse(pts[(size_t) i].x - r, pts[(size_t) i].y - r, 2 * r, 2 * r);
+    std::sort(nodes.begin(), nodes.end(), [](const Node& x, const Node& y) { return x.depth < y.depth; });
+    for (const auto& nd : nodes) {
+        const float t = (nd.depth - zmin) / zspan;
+        const float heat = nd.idx < frame_.numVerts ? frame_.kDev[nd.idx] : 0.0f;
+        const float r = 1.5f + 2.5f * t;
+        g.setColour(curvatureColour(heat * 3.0f, 0.45f + 0.55f * t).withAlpha(0.4f + 0.6f * t));
+        g.fillEllipse(nd.p.x - r, nd.p.y - r, 2 * r, 2 * r);
     }
 
-    if (frame_.strikeVertex < nv) {
-        const auto sp = pts[(size_t) frame_.strikeVertex];
+    if (frame_.strikeVertex < tetMesh_.numVertices()) {
+        float d;
+        const auto sp = project(frame_.strikeVertex, d);
         g.setColour(juce::Colour(0xFF7F77DD));
         g.fillEllipse(sp.x - 6, sp.y - 6, 12, 12);
         g.setColour(juce::Colour(0xFFEEEDFE));
@@ -325,6 +339,8 @@ void SpectrumView::paint(juce::Graphics& g)
     // bends the ratios. Both are audio-side, so mirror them here to keep the
     // view honest about what you hear.
     const float comb = proc_.apvts.getRawParameterValue("comb")->load();
+    const float combFreq = proc_.apvts.getRawParameterValue("combfreq")->load();
+    const float combPeriod = 2.0f + 14.0f * (1.0f - combFreq);
     const float warp = proc_.apvts.getRawParameterValue("warp")->load();
 
     juce::Path path;
@@ -336,8 +352,10 @@ void SpectrumView::paint(juce::Graphics& g)
             i == 0 ? path.startNewSubPath(x, y) : path.lineTo(x, y);
         }
         float alpha = m == 0 ? 0.95f : 0.45f;
-        if ((m & 1) != 0)
-            alpha *= 1.0f - 0.92f * comb;
+        if (comb > 0.0f) {
+            const float kill = 0.5f - 0.5f * std::cos(2.0f * (float) M_PI * m / combPeriod);
+            alpha *= 1.0f - 0.96f * comb * kill;
+        }
         if (alpha < 0.02f)
             continue;
         g.setColour(juce::Colour(0xFF7F77DD).withAlpha(alpha));
@@ -400,6 +418,7 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "bow", "Bow", "" }, { "t60", "T60", " s" },
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
              { "warp", "Spec Warp", "" }, { "comb", "Comb", "" },
+             { "combfreq", "Comb Freq", "" },
              { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
              { "strikedeform", "Strike Kick", "" }, { "strikeripple", "Strike Ripple", "" },
@@ -422,8 +441,13 @@ void CurvSynthEditor::timerCallback()
     const VizFrame* latest = nullptr;
     proc_.vizBus().readLatest(&latest);
     if (latest != nullptr) {
-        manifold_.setFrame(*latest);
-        spectrum_.pushFrame(*latest);
+        // only repaint the (expensive) manifold view when geometry actually
+        // changed — avoids redundant full re-renders when the object is static
+        if (latest->frameId != lastVizId_) {
+            manifold_.setFrame(*latest);
+            lastVizId_ = latest->frameId;
+        }
+        spectrum_.pushFrame(*latest);  // cheap; scrolls continuously for the time axis
     }
 }
 

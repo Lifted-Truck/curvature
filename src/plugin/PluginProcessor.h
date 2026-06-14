@@ -73,6 +73,7 @@ private:
     std::atomic<float>* pPress_ = nullptr;      // localized curvature injection
     std::atomic<float>* pPressSize_ = nullptr;  // bump falloff radius
     std::atomic<float>* pComb_ = nullptr;
+    std::atomic<float>* pCombFreq_ = nullptr;   // notch spacing over mode index
     std::atomic<float>* pImpulse_ = nullptr;    // mallet level, independent of bow
     std::atomic<float>* pMemory_ = nullptr;     // 1 = full patina, 0 = elastic
     std::atomic<float>* pMemRate_ = nullptr;    // patina-decay speed (own clock)

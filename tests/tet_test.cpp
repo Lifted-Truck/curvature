@@ -55,6 +55,29 @@ TEST_CASE("3-torus: plane waves are exact discrete eigenvectors")
     }
 }
 
+TEST_CASE("oblique 3-torus: plane waves still exact (generalized minimal image)")
+{
+    const int nx = 6, ny = 6, nz = 6;
+    const double basis[3][3] = { { 1.0, 0.5, 0.5 }, { 0.0, 0.866, 0.289 }, { 0.0, 0.0, 0.816 } };
+    const auto mesh = makeLatticeTorus3(nx, ny, nz, basis);
+    const auto lap = buildTetLaplacian(mesh, Eigen::VectorXd());
+
+    auto vid = [&](int i, int j, int k) { return (i * ny + j) * nz + k; };
+    for (auto [l, m, p] : { std::tuple { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 1 } }) {
+        Eigen::VectorXcd v(mesh.numVertices());
+        for (int i = 0; i < nx; ++i)
+            for (int j = 0; j < ny; ++j)
+                for (int k = 0; k < nz; ++k)
+                    v[vid(i, j, k)] = std::exp(std::complex<double>(
+                        0.0, 2.0 * M_PI * ((double) l * i / nx + (double) m * j / ny
+                                           + (double) p * k / nz)));
+        const Eigen::VectorXcd Lv = lap.L.cast<std::complex<double>>() * v;
+        const Eigen::VectorXcd Mv = lap.massDiag.cast<std::complex<double>>().asDiagonal() * v;
+        const double lam = (v.dot(Lv) / v.dot(Mv)).real();
+        REQUIRE((Lv - lam * Mv).norm() / Lv.norm() < 1e-9);
+    }
+}
+
 TEST_CASE("3-torus eigenvalues match Phase-0 Python (cube + anisotropic)")
 {
     for (auto [name, a, b, c] : { std::tuple { "torus3_cube8", 1.0, 1.0, 1.0 },
