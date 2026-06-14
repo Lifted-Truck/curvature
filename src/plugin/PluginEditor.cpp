@@ -317,6 +317,7 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
              { "strikedeform", "Strike Kick", "" }, { "strikeripple", "Strike Ripple", "" },
+             { "ripplespeed", "Ripple Speed", "" },
              { "memory", "Memory", "" }, { "memrate", "Mem Rate", "" },
              { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);

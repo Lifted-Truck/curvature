@@ -38,6 +38,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pWarp_ = apvts.getRawParameterValue("warp");
     pStrikeDeform_ = apvts.getRawParameterValue("strikedeform");
     pStrikeRipple_ = apvts.getRawParameterValue("strikeripple");
+    pRippleSpeed_ = apvts.getRawParameterValue("ripplespeed");
 
     startThread();
 }
@@ -124,6 +125,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // that propagates and damps out (a shimmer after the hit)
     layout.add(std::make_unique<P>("strikeripple", "Strike Ripple",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // ripple speed: how fast the wave propagates across the surface
+    layout.add(std::make_unique<P>("ripplespeed", "Ripple Speed",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.45f));
     return layout;
 }
 
@@ -215,9 +219,10 @@ void CurvSynthProcessor::run()
             flowSinceResolve += 0.05;
             publish = true;
         }
-        // advance the ripple wave while it has energy (propagates + damps)
+        // advance the ripple wave while it has energy (propagates + damps);
+        // Ripple Speed maps to wave speed (2..14 hops/unit), modulatable
         if (geometry_.rippleActive()) {
-            geometry_.rippleStep(0.03, 6.0, 2.0);
+            geometry_.rippleStep(0.03, 2.0 + 12.0 * pRippleSpeed_->load(), 2.0);
             publish = true;
         }
 

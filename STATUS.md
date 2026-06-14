@@ -211,6 +211,23 @@ the instrument.
 - gates: 21 Catch2 cases incl. mandelbulb eigenvalues vs Python (1e-6),
   pluginval 10, FFT oracle <1 cent, ASan clean.
 
+## Round 13 (2026-06-14) — Ripple Speed param; 4D (3-torus) prototype
+
+- **Ripple Speed** param (modulatable): maps to the strike-ripple wave speed
+  (2..14), so the propagation rate can be automated/LFO'd.
+- **4D object prototyped in Python first** (audition before the plugin port,
+  per project methodology; Julian found the mandelbulb underwhelming so we
+  de-risk). `prototype/manifold4d.py`: flat 3-torus T^3, Freudenthal tet mesh
+  of a periodic cube, 3D FEM Laplacian (PSD, L*const=0 verified), spectrum
+  matches the 3D lattice structure (exact shell multiplicities; eigenvalues
+  ~3% low on a coarse 12^3 grid). Audition in `renders/checkpoint4d/`:
+  measured spectral-density exponent ~3.0 (3-torus) vs ~2.0 (2-torus) — the
+  Weyl dimensional signature, audibly denser highs.
+- AWAITING JULIAN'S EAR: if the 3-torus character is compelling, next run
+  ports T^3 into the plugin (tet-mesh code path + rethought visualizer, since
+  a 3-manifold has no 2D surface — likely a slice or edge-cloud; flow would
+  be conformal/Yamabe, not Ricci).
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,
