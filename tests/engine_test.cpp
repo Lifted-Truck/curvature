@@ -49,6 +49,31 @@ TEST_CASE("modal voice: bounded, NaN-free, decays to silence")
     REQUIRE(tailPeak < 1e-3f); // T60 0.5s: silent after 4s
 }
 
+TEST_CASE("bowed voice: sustains energy and stays bounded (servo can't blow up)")
+{
+    ModalVoice voice;
+    voice.prepare(48000.0);
+    voice.setBow(0.9f);
+    voice.setImpulse(0.0f);  // pure bow
+    voice.noteOn(testFrame(64), 60, 1.0f, 110.0f, 6000.0f, { 4.0f, 0.5f, 0.3f }, 0);
+
+    std::vector<float> buf(48000 * 6, 0.0f);
+    for (size_t i = 0; i < buf.size(); i += 512)
+        voice.renderAdd(buf.data() + i, (int) std::min<size_t>(512, buf.size() - i));
+
+    float peak = 0.0f, lateRms = 0.0f;
+    const size_t lateStart = buf.size() - 48000;  // last second
+    for (size_t i = 0; i < buf.size(); ++i) {
+        REQUIRE(std::isfinite(buf[i]));
+        peak = std::max(peak, std::abs(buf[i]));
+        if (i >= lateStart)
+            lateRms += buf[i] * buf[i];
+    }
+    lateRms = std::sqrt(lateRms / 48000.0f);
+    REQUIRE(peak < 128.0f);     // amplitude servo stays bounded
+    REQUIRE(lateRms > 0.01f);   // and the bow actually sustains (no decay to silence)
+}
+
 TEST_CASE("modal voice: stable under continuous damping parameter sweeps")
 {
     ModalVoice voice;

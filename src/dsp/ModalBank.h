@@ -149,17 +149,28 @@ public:
                     ++injectPos_;
                 }
                 if (bowing) {
-                    // continuous lowpassed-noise friction drive (per-sample,
-                    // not stepped per control interval — the stepping was the
-                    // crackle), swelling in over ~0.6 s and tilted to the lows
+                    // bow = a per-mode amplitude servo that sustains each mode
+                    // toward a low-tilted target by pumping energy IN PHASE with
+                    // its motion (stick-slip): modes ring as pitched tones, not
+                    // hiss. A little lowpassed noise seeds + breathes. Swells in
+                    // over ~0.6 s. The factor clamp keeps it bounded.
                     rng_ = rng_ * 1664525u + 1013904223u;
                     const float white = (float) (int32_t) rng_ * 4.6566e-10f;
                     bowNoise_ += kBowLp * (white - bowNoise_);  // ~1.6 kHz one-pole
                     ++bowAge_;
                     const float swell = std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_));
-                    const float g = bow_ * bow_ * 0.012f * swell * bowNoise_;
-                    for (int m = 0; m < numModes_; ++m)
-                        s_[m] += g * bowWeight_[m];
+                    const float seed = bow_ * bow_ * 0.004f * swell * bowNoise_;
+                    const float k = 0.02f * swell;
+                    for (int m = 0; m < numModes_; ++m) {
+                        s_[m] += seed * bowWeight_[m];                 // breath / seed
+                        const float tgt = 9.0f * bow_ * std::abs(bowWeight_[m]);
+                        const float tgt2 = tgt * tgt + 1e-12f;
+                        const float amp2 = s_[m] * s_[m] + c_[m] * c_[m];
+                        float f = 1.0f + k * (tgt2 - amp2) / tgt2;     // sustain toward target
+                        f = std::clamp(f, 0.99f, 1.01f);
+                        s_[m] *= f;
+                        c_[m] *= f;
+                    }
                 }
                 float sum = 0.0f;
                 for (int m = 0; m < numModes_; ++m) {
