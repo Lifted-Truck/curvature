@@ -422,13 +422,14 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
              { "strikedeform", "Strike Kick", "" }, { "strikeripple", "Strike Ripple", "" },
-             { "ripplespeed", "Ripple Speed", "" },
+             { "ripplesize", "Ripple Size", "" }, { "ripplespeed", "Ripple Speed", "" },
              { "morphrate", "Morph Rate", "" }, { "morphdepth", "Morph Depth", "" },
+             { "morphangle", "Morph Angle", "" },
              { "memory", "Memory", "" }, { "memrate", "Mem Rate", "" },
              { "gain", "Gain", " dB" } })
         addSlider(id, name, suffix);
 
-    setSize(960, 560);
+    setSize(1000, 620);
     setResizable(true, true);
     setResizeLimits(720, 420, 1600, 1000);
     startTimerHz(30);
@@ -457,7 +458,7 @@ void CurvSynthEditor::addSlider(const juce::String& paramId, const juce::String&
 {
     auto slider = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,
                                                  juce::Slider::TextBoxRight);
-    slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 72, 16);
+    slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 16);
     slider->setTextValueSuffix(suffix);
     slider->setNumDecimalPlacesToDisplay(paramId == "modes" ? 0 : 2);
     addAndMakeVisible(*slider);
@@ -506,7 +507,9 @@ juce::String CurvSynthEditor::buildStateReport() const
       << ", ripple " << juce::String(raw("strikeripple"), 2)
       << ", memory " << juce::String(raw("memory"), 2) << "\n"
       << "morph: rate " << juce::String(raw("morphrate"), 2)
-      << ", depth " << juce::String(raw("morphdepth"), 2) << "\n"
+      << ", depth " << juce::String(raw("morphdepth"), 2)
+      << ", angle " << juce::String(raw("morphangle"), 2) << "\n"
+      << "ripple size: " << juce::String(raw("ripplesize"), 2) << "\n"
       << "gain: " << juce::String(raw("gain"), 1) << " dB\n"
       << "live curvature error max|K-Kbar|: " << juce::String(manifold_.curvatureErr(), 4) << "\n";
     return s;
@@ -537,11 +540,19 @@ void CurvSynthEditor::resized()
     resetButton_.setBounds(row.removeFromLeft(rowW * 12 / 100).reduced(2));
     copyButton_.setBounds(row.reduced(2));
 
-    const int rowH = juce::jmax(20, right.getHeight() / juce::jmax(1, (int) sliders_.size()));
-    for (size_t i = 0; i < sliders_.size(); ++i) {
-        auto r = right.removeFromTop(rowH);
-        labels_[i]->setBounds(r.removeFromLeft(70));
-        sliders_[i]->setBounds(r);
+    // two columns of sliders — the panel was running out of vertical space
+    right.removeFromTop(4);
+    const int n = (int) sliders_.size();
+    const int perCol = (n + 1) / 2;
+    const int colGap = 10;
+    const int colW = (right.getWidth() - colGap) / 2;
+    const int rowH = juce::jmax(18, right.getHeight() / juce::jmax(1, perCol));
+    for (int i = 0; i < n; ++i) {
+        const int col = i / perCol, rowIdx = i % perCol;
+        juce::Rectangle<int> r(right.getX() + col * (colW + colGap),
+                               right.getY() + rowIdx * rowH, colW, rowH - 2);
+        labels_[(size_t) i]->setBounds(r.removeFromLeft(58));
+        sliders_[(size_t) i]->setBounds(r);
     }
 }
 

@@ -34,13 +34,16 @@ public:
     void flowPress(float strikeParam, double amount, double dt, double sigma);
     // strike kick: gentle localized random deformation at the strike vertex
     void strikeKick(float strikeParam, double amount, unsigned seed);
-    // strike ripple: inject a propagating wave at the strike vertex, advance it
-    void rippleStrike(float strikeParam, double amount);
+    // strike ripple: inject a propagating wave at the strike vertex (sigma =
+    // injection footprint in hops; tighter = sharper), then advance it
+    void rippleStrike(float strikeParam, double amount, double sigma);
     void rippleStep(double dt, double speed, double damp);
     bool rippleActive() const { return is4D_ ? tet_->rippleActive() : flow_->rippleActive(); }
 
     // morph: advance the perpetual travelling-wave deformation
     void morphStep(double dPhase, double amp);
+    // rotate the morph travel axis in the phi_1/phi_2 plane (angle in radians)
+    void setMorphAngle(double angle);
     // editor snapshot (geometry thread)
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;
@@ -74,6 +77,7 @@ private:
     bool is4D_ = false;
     std::unique_ptr<RicciFlow> flow_;       // 2-manifold backend
     std::unique_ptr<TetManifold> tet_;      // 3-manifold (4D) backend
+    Eigen::MatrixXd morphPhi_;              // base phi_1, phi_2 for the morph axis
     mutable uint32_t nextFrameId_ = 1;
 };
 

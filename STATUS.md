@@ -285,6 +285,18 @@ the manifold so the metric never settles and the spectrum continuously morphs.
 (Particle-field resonance remains a separate-engine/project idea, not a
 bolt-on.)
 
+## Round 17 (2026-06-14) — Ripple Size, Morph Angle, two-column UI
+
+- **Ripple Size** param: injection footprint (tight sharp/high-freq .. broad),
+  amplitude scaled up at the tight end for more extreme ripples. rippleStrike
+  now takes sigma (both backends).
+- **Morph Angle** param: rotates the morph travel axis in the phi_1/phi_2
+  plane (captured at load); different sweep directions across the manifold.
+  Verified non-trivial (distinct trajectories at 0 vs pi/2).
+- **UI: two-column slider panel** (was running out of vertical space) +
+  larger default window (1000x620); narrower value boxes.
+- gates: 26 Catch2 cases, pluginval 10, FFT oracle, ASan clean, seal ok.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

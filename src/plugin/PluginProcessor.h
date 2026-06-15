@@ -83,6 +83,8 @@ private:
     std::atomic<float>* pRippleSpeed_ = nullptr;   // wave propagation speed
     std::atomic<float>* pMorphRate_ = nullptr;     // perpetual morph speed (bipolar)
     std::atomic<float>* pMorphDepth_ = nullptr;    // morph deformation amount
+    std::atomic<float>* pMorphAngle_ = nullptr;    // morph travel axis
+    std::atomic<float>* pRippleSize_ = nullptr;    // ripple injection footprint
 
     std::atomic<float> outputPeak_ { 0.0f };    // pre-saturator peak, for the meter
 

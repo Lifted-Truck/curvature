@@ -25,13 +25,26 @@ void GeometryService::loadPreset(PresetId id, const char* obj, size_t objSize)
     blendRemaining_ = 0;
     lambdaPreResolve_.resize(0);
 
-    // morph phase field = base first eigenfunction, normalized to [-pi, pi].
-    // Its gradient defines a natural travel direction on any manifold (around
-    // a cycle on the torus, pole-to-pole on the sphere); the morph wave sweeps
-    // along it. Captured once from the base geometry so it's a stable axis.
-    Eigen::VectorXd phi1 = modes_.phi.col(0);
-    const double peak = phi1.cwiseAbs().maxCoeff();
-    Eigen::VectorXd theta = (peak > 1e-12) ? (M_PI / peak) * phi1 : phi1;
+    // morph phase field = a rotatable blend of the base first two
+    // eigenfunctions. phi_1's gradient is a natural travel axis (around a
+    // cycle on the torus, pole-to-pole on the sphere); Morph Angle rotates it
+    // in the phi_1/phi_2 plane for different sweep directions. Captured once
+    // from the base geometry so the axis is stable.
+    morphPhi_.resize(modes_.phi.rows(), 2);
+    morphPhi_.col(0) = modes_.phi.col(0);
+    morphPhi_.col(1) = modes_.phi.col(1);
+    setMorphAngle(0.0);
+}
+
+void GeometryService::setMorphAngle(double angle)
+{
+    if (morphPhi_.cols() < 2)
+        return;
+    Eigen::VectorXd theta = std::cos(angle) * morphPhi_.col(0)
+                            + std::sin(angle) * morphPhi_.col(1);
+    const double peak = theta.cwiseAbs().maxCoeff();
+    if (peak > 1e-12)
+        theta *= M_PI / peak;  // normalize to [-pi, pi]
     if (is4D_) tet_->setMorphField(theta);
     else flow_->setMorphField(theta);
 }
@@ -146,11 +159,11 @@ void GeometryService::strikeKick(float strikeParam, double amount, unsigned seed
     rayleighUpdate();
 }
 
-void GeometryService::rippleStrike(float strikeParam, double amount)
+void GeometryService::rippleStrike(float strikeParam, double amount, double sigma)
 {
     const int v = strikeVertex(strikeParam);
-    if (is4D_) tet_->rippleStrike(v, amount);
-    else { flow_->rippleStrike(v, amount); flow_->writeFaceLengths(mesh_); }
+    if (is4D_) tet_->rippleStrike(v, amount, sigma);
+    else { flow_->rippleStrike(v, amount, sigma); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 

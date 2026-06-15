@@ -307,30 +307,29 @@ void RicciFlow::morphAdvance(double dPhase, double amp)
     morph_.array() -= morph_.mean();
 }
 
-void RicciFlow::rippleStrike(int vertex, double amount)
+void RicciFlow::rippleStrike(int vertex, double amount, double sigma)
 {
-    // localized displacement bump (graph distance falloff, ~2 hops) that the
-    // wave step then propagates outward
+    // localized displacement bump (graph-distance falloff = sigma hops) that
+    // the wave step then propagates. Tighter sigma -> sharper wavefront / more
+    // high-frequency ripple content.
     const int n = mesh_->numVertices();
+    const int maxHops = std::max(2, (int) std::ceil(3.0 * sigma));
     std::vector<int> dist((size_t) n, -1);
     std::vector<int> queue { vertex };
     dist[(size_t) vertex] = 0;
     for (size_t qi = 0; qi < queue.size(); ++qi)
         for (int nb : adjacency_[(size_t) queue[qi]])
-            if (dist[(size_t) nb] < 0) {
+            if (dist[(size_t) nb] < 0 && dist[(size_t) queue[qi]] < maxHops) {
                 dist[(size_t) nb] = dist[(size_t) queue[qi]] + 1;
                 queue.push_back(nb);
-                if (dist[(size_t) nb] > 5)  // local injection only
-                    goto done;
             }
-done:
     // mean-free bump: the graph Laplacian's constant mode has no restoring
     // force, so any DC component would persist forever (a permanent metric
     // offset). Subtract the bump's mean so the wave fully returns to rest.
     Eigen::VectorXd bump = Eigen::VectorXd::Zero(n);
     for (int i = 0; i < n; ++i)
         if (dist[(size_t) i] >= 0) {
-            const double d = dist[(size_t) i] / 2.0;
+            const double d = dist[(size_t) i] / std::max(sigma, 0.4);
             bump[i] = amount * std::exp(-d * d);
         }
     bump.array() -= bump.mean();

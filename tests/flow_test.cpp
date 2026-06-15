@@ -198,7 +198,7 @@ TEST_CASE("ripple: a strike wave propagates outward then damps to rest")
     RicciFlow flow(mesh);
     REQUIRE_FALSE(flow.rippleActive());
 
-    flow.rippleStrike(100, 0.4);
+    flow.rippleStrike(100, 0.4, 2.0);
     REQUIRE(flow.rippleActive());           // energy injected
 
     bool stayedFinite = true;

@@ -108,10 +108,10 @@ void TetManifold::strikeKick(int vertex, double amount, unsigned seed)
     u_ = (u_ + field).cwiseMax(-uClamp_).cwiseMin(uClamp_);
 }
 
-void TetManifold::rippleStrike(int vertex, double amount)
+void TetManifold::rippleStrike(int vertex, double amount, double sigma)
 {
     Eigen::VectorXd bump;
-    bfsBump(vertex, 2.0, bump, 6);
+    bfsBump(vertex, sigma, bump, std::max(2, (int) std::ceil(3.0 * sigma)));
     bump.array() -= bump.mean();           // no DC (graph Laplacian has no restoring DC)
     ripple_ += amount * bump;
     rippleEnergy_ = ripple_.squaredNorm() + rippleVel_.squaredNorm();

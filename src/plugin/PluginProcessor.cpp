@@ -42,6 +42,8 @@ CurvSynthProcessor::CurvSynthProcessor()
     pRippleSpeed_ = apvts.getRawParameterValue("ripplespeed");
     pMorphRate_ = apvts.getRawParameterValue("morphrate");
     pMorphDepth_ = apvts.getRawParameterValue("morphdepth");
+    pMorphAngle_ = apvts.getRawParameterValue("morphangle");
+    pRippleSize_ = apvts.getRawParameterValue("ripplesize");
 
     startThread();
 }
@@ -141,6 +143,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
                                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
     layout.add(std::make_unique<P>("morphdepth", "Morph Depth",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // morph angle: rotate the travel axis (phi_1/phi_2 blend), 0..1 -> 0..pi
+    layout.add(std::make_unique<P>("morphangle", "Morph Angle",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
+    // ripple size: injection footprint — tight (sharp, high-freq) .. broad
+    layout.add(std::make_unique<P>("ripplesize", "Ripple Size",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.4f));
     return layout;
 }
 
@@ -155,6 +163,7 @@ void CurvSynthProcessor::run()
     double manualTarget = 0.0;
     float manualLastSharp = -1.0f;
     bool manualStalled = false;
+    float lastMorphAngle = -1.0f;
     constexpr double kResolveFlowTime = 0.6;  // re-solve cadence in flow time:
                                               // bounds fast-path drift regardless of rate
     constexpr double kMaxDt = 0.25;           // per-step flow time at rate 1.0
@@ -229,8 +238,14 @@ void CurvSynthProcessor::run()
             if (strikeDeform > 0.001f)  // gentle, varied, self-correcting localized kick
                 geometry_.strikeKick(hit.strikeParam,
                                      0.45 * strikeDeform * hit.velocity, kickSeed++);
-            if (strikeRipple > 0.001f)  // strong injection — let it be pushed to the limit
-                geometry_.rippleStrike(hit.strikeParam, 1.4 * strikeRipple * hit.velocity);
+            if (strikeRipple > 0.001f) {
+                // tight (sharp, high-freq wavefront) .. broad; amplitude scaled
+                // up at the tight end for more extreme ripples
+                const float sz = pRippleSize_->load();
+                const double sigma = 0.5 + 3.5 * sz;
+                const double amp = (2.4 - 1.2 * sz) * strikeRipple * hit.velocity;
+                geometry_.rippleStrike(hit.strikeParam, amp, sigma);
+            }
             flowSinceResolve += 0.05;
             publish = true;
         }
@@ -242,9 +257,15 @@ void CurvSynthProcessor::run()
         }
 
         // morph: perpetually travel the conformal wave so the object never
-        // settles. Rate (bipolar) = phase speed + direction; depth = amount.
+        // settles. Rate (bipolar) = phase speed + direction; depth = amount;
+        // angle rotates the travel axis (recomputed only when it changes).
         const float morphRate = pMorphRate_->load();
         const float morphDepth = pMorphDepth_->load();
+        const float morphAngle = pMorphAngle_->load();
+        if (morphAngle != lastMorphAngle) {
+            geometry_.setMorphAngle((double) morphAngle * juce::MathConstants<double>::pi);
+            lastMorphAngle = morphAngle;
+        }
         if (morphDepth > 0.001f) {
             geometry_.morphStep((double) morphRate * 0.18, 0.6 * morphDepth);
             publish = true;

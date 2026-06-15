@@ -52,7 +52,7 @@ public:
     // (flow/press/memory-managed) base metric. A strike injects a localized
     // displacement that propagates across the surface and damps out — heard
     // as the spectrum shimmering after the hit, seen as a spreading ring.
-    void rippleStrike(int vertex, double amount);
+    void rippleStrike(int vertex, double amount, double sigma);
     void rippleStep(double dt, double speed, double damp);
     bool rippleActive() const { return rippleEnergy_ > 1e-9; }
 

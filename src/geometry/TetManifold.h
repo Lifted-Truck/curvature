@@ -28,7 +28,7 @@ public:
     double step(double dt, double direction);   // +1 relax (diffuse), -1 sharpen
     void press(int vertex, double amount, double dt, double sigma);
     void strikeKick(int vertex, double amount, unsigned seed);
-    void rippleStrike(int vertex, double amount);
+    void rippleStrike(int vertex, double amount, double sigma);
     void rippleStep(double dt, double speed, double damp);
     bool rippleActive() const { return rippleEnergy_ > 1e-9; }
     void relaxToBase(double rate);
