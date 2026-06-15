@@ -212,6 +212,27 @@ TEST_CASE("ripple: a strike wave propagates outward then damps to rest")
     REQUIRE_FALSE(flow.rippleActive());      // damping returned it to rest
 }
 
+TEST_CASE("fundamental stays the lowest under heavy morph+flow (no undertones)")
+{
+    // regression: mode-identity tracking can leave slot 0 non-minimal, which
+    // (when ratios normalized by slot 0) collapsed the register and made Warp
+    // produce undertones. Normalizing by the true minimum must keep every
+    // published ratio >= 1 no matter how scrambled the mode order gets.
+    GeometryService geo;
+    geo.loadPreset(PresetId::TorusGolden, nullptr, 0);
+    geo.flowKick(0.6, 3);
+    for (int i = 0; i < 120; ++i) {
+        geo.morphStep(0.2, 0.6);
+        geo.flowStep(0.2, (i % 2) ? +1.0 : -1.0);
+        if (i % 15 == 14) geo.resolve();
+        SpectrumFrame f;
+        geo.fillFrame(f, 96, 0.4f);
+        float minRatio = 1e9f;
+        for (int m = 0; m < f.numModes; ++m) minRatio = std::min(minRatio, f.ratio[m]);
+        REQUIRE(minRatio >= 1.0f - 1e-4f);  // fundamental is always the lowest
+    }
+}
+
 TEST_CASE("morph: perpetually changes the spectrum, stays finite and bounded")
 {
     GeometryService geo;

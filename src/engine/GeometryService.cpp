@@ -69,7 +69,10 @@ void GeometryService::fillFrame(SpectrumFrame& frame, int numModes, float strike
 {
     const int k = std::clamp(numModes, 1, std::min(kMaxModes, (int) lambda_.size()));
     const int vtx = strikeVertex(strikeParam);
-    const double lam1 = std::max(lambda_[0], 1e-12);
+    // normalize to the SMALLEST eigenvalue, not slot 0: mode-identity tracking
+    // through crossings can leave slot 0 holding a non-minimal mode, which
+    // would jump the register and push ratios < 1 (Warp -> undertones).
+    const double lam1 = std::max(lambda_.minCoeff(), 1e-12);
 
     frame.numModes = k;
     frame.frameId = nextFrameId_++;
@@ -146,7 +149,7 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
 
     const int k = std::clamp(numModes, 1, std::min(kMaxModes, (int) lambda_.size()));
     frame.numModes = k;
-    const double lam1 = std::max(lambda_[0], 1e-12);
+    const double lam1 = std::max(lambda_.minCoeff(), 1e-12);  // smallest = fundamental
     for (int m = 0; m < k; ++m)
         frame.ratio[m] = static_cast<float>(std::sqrt(std::max(lambda_[m], 0.0) / lam1));
 }

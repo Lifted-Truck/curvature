@@ -79,7 +79,7 @@ public:
             const float warped = std::pow(frame.ratio[m], warp_);
             const float f = noteHz * warped;
             if (f >= nyquistGuard)
-                break;  // ratios ascend; everything after is out too
+                continue;  // skip (mode order isn't guaranteed ascending after matching)
             ratio_[k] = frame.ratio[m];  // base (unwarped) ratio for live warp
             freq_[k] = f;
             const float mallet = 1.0f / (1.0f + std::pow(f / malletCutoff, 4.0f));
