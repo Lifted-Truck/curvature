@@ -56,6 +56,7 @@ RicciFlow::RicciFlow(const Mesh& mesh, double uClamp)
 
     ripple_ = Eigen::VectorXd::Zero(n);
     rippleVel_ = Eigen::VectorXd::Zero(n);
+    morph_ = Eigen::VectorXd::Zero(n);
 }
 
 void RicciFlow::faceLengthsFor(const Eigen::VectorXd& u,
@@ -289,10 +290,21 @@ void RicciFlow::perturb(double amplitude, unsigned seed)
 void RicciFlow::writeFaceLengths(Mesh& mesh) const
 {
     // the eigensolver/curvature see the base metric plus the transient ripple
-    if (rippleEnergy_ > 1e-12)
-        faceLengthsFor(u_ + ripple_, mesh.faceLengths);
-    else
-        faceLengthsFor(u_, mesh.faceLengths);
+    // and the perpetual morph wave
+    Eigen::VectorXd eff = u_;
+    if (rippleEnergy_ > 1e-12) eff += ripple_;
+    if (morphAmp_ > 1e-9) eff += morph_;
+    faceLengthsFor(eff, mesh.faceLengths);
+}
+
+void RicciFlow::morphAdvance(double dPhase, double amp)
+{
+    morphAmp_ = amp;
+    if (morphTheta_.size() != u_.size()) { morph_.setZero(u_.size()); return; }
+    morphPhase_ += dPhase;
+    // travelling conformal wave along the phase field; mean-free (scale-neutral)
+    morph_ = amp * (morphTheta_.array() - morphPhase_).cos();
+    morph_.array() -= morph_.mean();
 }
 
 void RicciFlow::rippleStrike(int vertex, double amount)

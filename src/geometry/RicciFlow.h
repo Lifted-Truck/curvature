@@ -41,7 +41,8 @@ public:
     // silently none).
     void press(int vertex, double amount, double dt, double sigma = 2.2);
 
-    void reset() { u_ = u0_; ripple_.setZero(); rippleVel_.setZero(); }
+    void reset() { u_ = u0_; ripple_.setZero(); rippleVel_.setZero();
+                   morph_.setZero(); morphPhase_ = 0.0; }
 
     // elastic restoring step toward the base metric (the Memory control's
     // engine: rate 0 = full patina, rate -> 1 = snap back)
@@ -58,6 +59,14 @@ public:
     const Eigen::VectorXd& logRadii() const { return u_; }
     const Eigen::VectorXd& logRadiiBase() const { return u0_; }
     const Eigen::VectorXd& rippleField() const { return ripple_; }
+    const Eigen::VectorXd& morphField() const { return morph_; }
+
+    // ---- morph: a conformal wave that perpetually travels across the
+    // manifold (set theta = base phase field; advance the phase each tick).
+    // The metric never settles -> the spectrum continuously morphs.
+    void setMorphField(const Eigen::VectorXd& theta) { morphTheta_ = theta; }
+    void morphAdvance(double dPhase, double amp);
+    bool morphActive() const { return morphAmp_ > 1e-9; }
     Eigen::VectorXd curvatureDeviation() const
     {
         return curvatures(u_).array() - kTarget_;
@@ -91,6 +100,9 @@ private:
 
     Eigen::VectorXd ripple_, rippleVel_;  // transient wave field + its velocity
     double rippleEnergy_ = 0.0;
+
+    Eigen::VectorXd morphTheta_, morph_;  // travelling-wave phase field + current field
+    double morphPhase_ = 0.0, morphAmp_ = 0.0;
 };
 
 } // namespace curv

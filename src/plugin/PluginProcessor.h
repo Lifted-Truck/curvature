@@ -81,6 +81,8 @@ private:
     std::atomic<float>* pStrikeDeform_ = nullptr;  // how much each strike dents
     std::atomic<float>* pStrikeRipple_ = nullptr;  // propagating wave per strike
     std::atomic<float>* pRippleSpeed_ = nullptr;   // wave propagation speed
+    std::atomic<float>* pMorphRate_ = nullptr;     // perpetual morph speed (bipolar)
+    std::atomic<float>* pMorphDepth_ = nullptr;    // morph deformation amount
 
     std::atomic<float> outputPeak_ { 0.0f };    // pre-saturator peak, for the meter
 

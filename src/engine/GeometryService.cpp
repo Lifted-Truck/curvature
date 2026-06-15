@@ -24,6 +24,16 @@ void GeometryService::loadPreset(PresetId id, const char* obj, size_t objSize)
     lambda_ = modes_.lambda;
     blendRemaining_ = 0;
     lambdaPreResolve_.resize(0);
+
+    // morph phase field = base first eigenfunction, normalized to [-pi, pi].
+    // Its gradient defines a natural travel direction on any manifold (around
+    // a cycle on the torus, pole-to-pole on the sphere); the morph wave sweeps
+    // along it. Captured once from the base geometry so it's a stable axis.
+    Eigen::VectorXd phi1 = modes_.phi.col(0);
+    const double peak = phi1.cwiseAbs().maxCoeff();
+    Eigen::VectorXd theta = (peak > 1e-12) ? (M_PI / peak) * phi1 : phi1;
+    if (is4D_) tet_->setMorphField(theta);
+    else flow_->setMorphField(theta);
 }
 
 LaplacianPair GeometryService::currentLaplacian() const
@@ -111,9 +121,9 @@ void GeometryService::fillVizFrame(VizFrame& frame, int numModes, float strikePa
         frame.curvatureErr = static_cast<float>(tet_->curvatureError());
     } else {
         const Eigen::VectorXd kDev = flow_->curvatureDeviation();
-        // include the transient ripple so the spreading wave is visible
+        // include the transient ripple + perpetual morph so both are visible
         const Eigen::VectorXd uDev = flow_->logRadii() - flow_->logRadiiBase()
-                                     + flow_->rippleField();
+                                     + flow_->rippleField() + flow_->morphField();
         frame.curvatureErr = static_cast<float>(kDev.cwiseAbs().maxCoeff());
         for (int i = 0; i < nv; ++i) {
             frame.kDev[i] = static_cast<float>(kDev[i]);
@@ -148,6 +158,13 @@ void GeometryService::rippleStep(double dt, double speed, double damp)
 {
     if (is4D_) tet_->rippleStep(dt, speed, damp);
     else { flow_->rippleStep(dt, speed, damp); flow_->writeFaceLengths(mesh_); }
+    rayleighUpdate();
+}
+
+void GeometryService::morphStep(double dPhase, double amp)
+{
+    if (is4D_) tet_->morphAdvance(dPhase, amp);
+    else { flow_->morphAdvance(dPhase, amp); flow_->writeFaceLengths(mesh_); }
     rayleighUpdate();
 }
 

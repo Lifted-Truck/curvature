@@ -40,6 +40,8 @@ CurvSynthProcessor::CurvSynthProcessor()
     pStrikeDeform_ = apvts.getRawParameterValue("strikedeform");
     pStrikeRipple_ = apvts.getRawParameterValue("strikeripple");
     pRippleSpeed_ = apvts.getRawParameterValue("ripplespeed");
+    pMorphRate_ = apvts.getRawParameterValue("morphrate");
+    pMorphDepth_ = apvts.getRawParameterValue("morphdepth");
 
     startThread();
 }
@@ -132,6 +134,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // ripple speed: how fast the wave propagates across the surface
     layout.add(std::make_unique<P>("ripplespeed", "Ripple Speed",
                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.45f));
+    // morph: a conformal wave that perpetually travels across the manifold so
+    // the object never settles. Rate is bipolar (speed + direction); depth is
+    // how far it deforms. An object in permanent flux.
+    layout.add(std::make_unique<P>("morphrate", "Morph Rate",
+                                   juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
+    layout.add(std::make_unique<P>("morphdepth", "Morph Depth",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     return layout;
 }
 
@@ -232,6 +241,15 @@ void CurvSynthProcessor::run()
             publish = true;
         }
 
+        // morph: perpetually travel the conformal wave so the object never
+        // settles. Rate (bipolar) = phase speed + direction; depth = amount.
+        const float morphRate = pMorphRate_->load();
+        const float morphDepth = pMorphDepth_->load();
+        if (morphDepth > 0.001f) {
+            geometry_.morphStep((double) morphRate * 0.18, 0.6 * morphDepth);
+            publish = true;
+        }
+
         bool manualMode = (flowMode == 3);
         if (manualMode && flowRate > 0.0f) {
             // Manual = a bidirectional position control scrubbing along the
@@ -312,7 +330,7 @@ void CurvSynthProcessor::run()
 
         const bool busy = flowMode != 0 || std::abs(press) > 0.001f || elastic
                           || strikeDeform > 0.001f || strikeRipple > 0.001f
-                          || geometry_.rippleActive();
+                          || geometry_.rippleActive() || morphDepth > 0.001f;
         wait(kGeometryPollMs >> (busy ? 1 : 0));
         } catch (...) {
             lastManifold = -1;       // force reload + republish next iteration

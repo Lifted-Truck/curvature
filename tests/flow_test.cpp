@@ -212,6 +212,29 @@ TEST_CASE("ripple: a strike wave propagates outward then damps to rest")
     REQUIRE_FALSE(flow.rippleActive());      // damping returned it to rest
 }
 
+TEST_CASE("morph: perpetually changes the spectrum, stays finite and bounded")
+{
+    GeometryService geo;
+    geo.loadPreset(PresetId::TorusGolden, nullptr, 0);
+
+    SpectrumFrame f0;
+    geo.fillFrame(f0, 96, 0.4f);
+    std::vector<float> r0(f0.ratio, f0.ratio + f0.numModes);
+
+    bool changed = false, finite = true;
+    for (int i = 0; i < 80; ++i) {
+        geo.morphStep(0.18, 0.5);          // advance the travelling wave
+        SpectrumFrame f;
+        geo.fillFrame(f, 96, 0.4f);
+        for (int m = 0; m < f.numModes; ++m) {
+            if (!std::isfinite(f.ratio[m]) || f.ratio[m] > 1e4f) finite = false;
+            if (std::abs(f.ratio[m] - r0[(size_t) m]) > 0.01f) changed = true;
+        }
+    }
+    REQUIRE(finite);     // never blows up
+    REQUIRE(changed);    // the spectrum genuinely morphs
+}
+
 TEST_CASE("flow reset restores the base spectrum")
 {
     GeometryService geo;

@@ -76,6 +76,8 @@ int main(int argc, char** argv)
     const float flowRate = std::stof(get("flow-rate", "0.5"));
     const double kickAmp = std::stod(get("kick", "0"));
     const float bow = std::stof(get("bow", "0"));
+    const float morphRate = std::stof(get("morph-rate", "0"));
+    const float morphDepth = std::stof(get("morph-depth", "0"));
 
     std::string objData;
     if (curv::presetNeedsObj((curv::PresetId) preset)) {
@@ -104,8 +106,8 @@ int main(int argc, char** argv)
     voice.setBow(bow);  // before noteOn: independent of the mallet impulse
     voice.setWarp(warp);
     voice.noteOn(frame, 69, 1.0f, noteHz, mallet, { t60, tilt, release }, 0);
-    if (flowMode != 0)
-        voice.setGlobalTuning(&frame);
+    if (flowMode != 0 || morphDepth > 0.0f)
+        voice.setGlobalTuning(&frame);  // morph/flow retune ringing modes live
 
     const int n = static_cast<int>(seconds * sr);
     std::vector<float> audio((size_t) n, 0.0f);
@@ -113,12 +115,18 @@ int main(int argc, char** argv)
     const double dt = 0.25 * flowRate * flowRate;
     double flowSinceResolve = 0.0;
     for (int i = 0; i < n; i += kBlock) {
+        bool changed = false;
         if (flowMode != 0 && dt > 0.0) {
             flowSinceResolve += geometry.flowStep(dt, flowMode == 1 ? +1.0 : -1.0);
-            if (flowSinceResolve >= 0.6) {   // same cadence policy as the plugin
-                geometry.resolve();
-                flowSinceResolve = 0.0;
-            }
+            changed = true;
+        }
+        if (morphDepth > 0.0f) {
+            geometry.morphStep((double) morphRate * 0.18, 0.6 * morphDepth);
+            flowSinceResolve += 0.05;
+            changed = true;
+        }
+        if (changed) {
+            if (flowSinceResolve >= 0.6) { geometry.resolve(); flowSinceResolve = 0.0; }
             geometry.fillFrame(frame, modes, strike);
         }
         voice.renderAdd(audio.data() + i, std::min(kBlock, n - i));

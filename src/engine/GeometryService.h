@@ -38,6 +38,9 @@ public:
     void rippleStrike(float strikeParam, double amount);
     void rippleStep(double dt, double speed, double damp);
     bool rippleActive() const { return is4D_ ? tet_->rippleActive() : flow_->rippleActive(); }
+
+    // morph: advance the perpetual travelling-wave deformation
+    void morphStep(double dPhase, double amp);
     // editor snapshot (geometry thread)
     void fillVizFrame(struct VizFrame& frame, int numModes, float strikeParam,
                       int presetId) const;

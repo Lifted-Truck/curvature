@@ -265,16 +265,25 @@ Julian auditioned the Python prototype and approved the port. Now playable.
   coasts, so the limit no longer crashes).
 - gates: 25 Catch2 cases, pluginval 10, FFT oracle, ASan clean.
 
-## Next big item: PERPETUALLY-MORPHING OBJECT (Julian, round 15)
+## Round 16 (2026-06-14) — perpetually-morphing object (Morph) SHIPPED
 
-Julian wants an object whose metric continuously changes so the sound never
-settles (his "continually shifting" mandelbulb intuition; the engine is
-intrinsic so a static embedding rotation wouldn't change the sound — the
-*metric* must move). Plan: a "Morph" gesture = a conformal deformation that
-perpetually travels across the manifold (e.g. a bump orbiting the torus minor
-circle), speed+direction from a bipolar slider; generalizes to a traveling
-deformation along a vertex path / a standing-wave LFO on the conformal factor.
-Its own focused run. (Particle-field resonance = separate engine/project.)
+The "impossible substance": a conformal wave that perpetually travels across
+the manifold so the metric never settles and the spectrum continuously morphs.
+- Phase field = base first eigenfunction phi_1 normalized to [-pi,pi]; its
+  gradient is a natural travel axis on any manifold (orbits a cycle on the
+  torus, sweeps pole-to-pole on the sphere). morph_i = depth*cos(theta_i -
+  phase), mean-free, added to the metric on top of u_/ripple_ (perpetual, not
+  healed by Memory). Added to both backends (RicciFlow + TetManifold).
+- Params: **Morph Rate** (bipolar = speed + direction) and **Morph Depth**.
+  Geometry thread advances the phase each tick; coexists with every other
+  gesture; bounded by construction (can't diverge).
+- Measured spectral swing over a morph cycle: ~55% (2-torus), ~104% (3-torus)
+  — strong, cyclic, audible motion. Works on every preset incl. 4D.
+- gates: 26 Catch2 cases (incl. morph-perpetual-and-finite), pluginval 10,
+  ASan clean, seal verified.
+
+(Particle-field resonance remains a separate-engine/project idea, not a
+bolt-on.)
 
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 

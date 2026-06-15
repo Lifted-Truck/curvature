@@ -12,6 +12,7 @@ TetManifold::TetManifold(TetMesh mesh) : mesh_(std::move(mesh))
     u_ = Eigen::VectorXd::Zero(n);
     ripple_ = Eigen::VectorXd::Zero(n);
     rippleVel_ = Eigen::VectorXd::Zero(n);
+    morph_ = Eigen::VectorXd::Zero(n);
 }
 
 Eigen::VectorXd TetManifold::graphLaplacian(const Eigen::VectorXd& f) const
@@ -30,8 +31,19 @@ Eigen::VectorXd TetManifold::graphLaplacian(const Eigen::VectorXd& f) const
 
 LaplacianPair TetManifold::currentLaplacian() const
 {
-    return rippleEnergy_ > 1e-12 ? buildTetLaplacian(mesh_, u_ + ripple_)
-                                 : buildTetLaplacian(mesh_, u_);
+    Eigen::VectorXd eff = u_;
+    if (rippleEnergy_ > 1e-12) eff += ripple_;
+    if (morphAmp_ > 1e-9) eff += morph_;
+    return buildTetLaplacian(mesh_, eff);
+}
+
+void TetManifold::morphAdvance(double dPhase, double amp)
+{
+    morphAmp_ = amp;
+    if (morphTheta_.size() != u_.size()) { morph_.setZero(u_.size()); return; }
+    morphPhase_ += dPhase;
+    morph_ = amp * (morphTheta_.array() - morphPhase_).cos();
+    morph_.array() -= morph_.mean();
 }
 
 void TetManifold::bfsBump(int vertex, double sigma, Eigen::VectorXd& out, int maxHops) const
@@ -150,8 +162,10 @@ double TetManifold::curvatureRms() const
 
 void TetManifold::fillViz(float* color, float* disp, int maxN) const
 {
-    const Eigen::VectorXd c = graphLaplacian(u_ + ripple_);  // concentration -> heat
-    const Eigen::VectorXd d = u_ + ripple_;                  // displacement
+    Eigen::VectorXd eff = u_ + ripple_;
+    if (morphAmp_ > 1e-9) eff += morph_;
+    const Eigen::VectorXd c = graphLaplacian(eff);          // concentration -> heat
+    const Eigen::VectorXd& d = eff;                         // displacement
     const int n = std::min(numVertices(), maxN);
     for (int i = 0; i < n; ++i) {
         color[i] = static_cast<float>(c[i]);

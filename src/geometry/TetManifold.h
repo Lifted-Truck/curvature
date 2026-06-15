@@ -32,7 +32,14 @@ public:
     void rippleStep(double dt, double speed, double damp);
     bool rippleActive() const { return rippleEnergy_ > 1e-9; }
     void relaxToBase(double rate);
-    void reset() { u_.setZero(); ripple_.setZero(); rippleVel_.setZero(); rippleEnergy_ = 0.0; }
+    void reset() { u_.setZero(); ripple_.setZero(); rippleVel_.setZero();
+                   rippleEnergy_ = 0.0; morph_.setZero(); morphPhase_ = 0.0; }
+
+    // morph: perpetually travelling conformal wave (see RicciFlow)
+    void setMorphField(const Eigen::VectorXd& theta) { morphTheta_ = theta; }
+    void morphAdvance(double dPhase, double amp);
+    bool morphActive() const { return morphAmp_ > 1e-9; }
+    const Eigen::VectorXd& morphField() const { return morph_; }
 
     double curvatureError() const;   // max |graph-Laplacian(u)| — concentration peak
     double curvatureRms() const;     // RMS — the smooth Manual-servo variable
@@ -49,6 +56,8 @@ private:
     Eigen::VectorXd u_;          // conformal factor (base = 0 = flat)
     Eigen::VectorXd ripple_, rippleVel_;
     double rippleEnergy_ = 0.0;
+    Eigen::VectorXd morphTheta_, morph_;
+    double morphPhase_ = 0.0, morphAmp_ = 0.0;
     double uClamp_ = 1.5;
 };
 
