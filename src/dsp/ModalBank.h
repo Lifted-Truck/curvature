@@ -158,7 +158,12 @@ public:
                     const float white = (float) (int32_t) rng_ * 4.6566e-10f;
                     bowNoise_ += kBowLp * (white - bowNoise_);  // ~1.6 kHz one-pole
                     ++bowAge_;
-                    const float swell = std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_));
+                    // power-curve swell: rises fast early (~57% by 150 ms) so
+                    // short / fast-succession notes still speak, then blooms to
+                    // full over ~0.6 s for sustained notes. (A linear 0.6 s
+                    // ramp left short notes inaudibly bowed — impulse only.)
+                    const float swell = std::pow(
+                        std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_)), 0.4f);
                     const float seed = bow_ * bow_ * 0.004f * swell * bowNoise_;
                     const float k = 0.02f * swell;
                     for (int m = 0; m < numModes_; ++m) {

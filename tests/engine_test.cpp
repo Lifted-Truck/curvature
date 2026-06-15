@@ -61,6 +61,13 @@ TEST_CASE("bowed voice: sustains energy and stays bounded (servo can't blow up)"
     for (size_t i = 0; i < buf.size(); i += 512)
         voice.renderAdd(buf.data() + i, (int) std::min<size_t>(512, buf.size() - i));
 
+    // a short bow stroke must already speak (fast-succession notes were silent
+    // when the swell was a slow 0.6 s linear ramp — impulse only)
+    float earlyRms = 0.0f;
+    for (int i = 4800; i < 4800 + 4800; ++i)  // ~0.1-0.2 s window
+        earlyRms += buf[i] * buf[i];
+    REQUIRE(std::sqrt(earlyRms / 4800.0f) > 0.005f);
+
     float peak = 0.0f, lateRms = 0.0f;
     const size_t lateStart = buf.size() - 48000;  // last second
     for (size_t i = 0; i < buf.size(); ++i) {
