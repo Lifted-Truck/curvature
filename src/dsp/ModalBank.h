@@ -168,13 +168,18 @@ public:
                     const float k = 0.02f * swell;
                     for (int m = 0; m < numModes_; ++m) {
                         s_[m] += seed * bowWeight_[m];                 // breath / seed
-                        const float tgt = 9.0f * bow_ * std::abs(bowWeight_[m]);
+                        const float tgt = 5.0f * bow_ * std::abs(bowWeight_[m]);
                         const float tgt2 = tgt * tgt + 1e-12f;
                         const float amp2 = s_[m] * s_[m] + c_[m] * c_[m];
-                        float f = 1.0f + k * (tgt2 - amp2) / tgt2;     // sustain toward target
-                        f = std::clamp(f, 0.99f, 1.01f);
-                        s_[m] *= f;
-                        c_[m] *= f;
+                        // ADD-ONLY: pump energy when a mode is below its target,
+                        // never below 1.0 — the bow must not damp the strike
+                        // (that suppressed struck+bowed notes). Natural T60
+                        // handles decay; the bow only fills sustain underneath.
+                        if (amp2 < tgt2) {
+                            const float f = std::min(1.0f + k * (tgt2 - amp2) / tgt2, 1.01f);
+                            s_[m] *= f;
+                            c_[m] *= f;
+                        }
                     }
                 }
                 float sum = 0.0f;

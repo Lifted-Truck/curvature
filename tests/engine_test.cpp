@@ -99,6 +99,52 @@ TEST_CASE("modal voice: stable under continuous damping parameter sweeps")
     }
 }
 
+TEST_CASE("tap-tap-tap then hold still sounds (note-trigger regression)")
+{
+    // Julian: tapping a few times then holding produced silence. Mirror the
+    // plugin's block loop (render in 512-sample blocks, updateActivity each
+    // block) with bow + impulse both on.
+    VoiceManager vm;
+    vm.prepare(48000.0);
+    vm.setDamping({ 5.0f, 0.7f, 0.3f, 0.0f, 0.5f });
+    vm.setBow(0.7f);
+    vm.setImpulse(1.0f);
+    auto frame = testFrame();
+    vm.setGlobalFrame(&frame);  // default Voices = Global Flow
+
+    std::vector<float> buf(2048);
+    float phase = 0.0f;
+    auto render = [&](int blocks) {
+        for (int b = 0; b < blocks; ++b) {
+            phase += 0.05f;  // mutate the frame like morph does
+            for (int m = 0; m < frame.numModes; ++m)
+                frame.ratio[m] = std::sqrt((float) (m + 1)) * (1.0f + 0.1f * std::sin(phase + m));
+            vm.setGlobalFrame(&frame);
+            std::fill(buf.begin(), buf.end(), 0.0f);
+            vm.renderAdd(buf.data(), (int) buf.size());
+            vm.updateActivity();
+        }
+    };
+
+    for (int tap = 0; tap < 12; ++tap) {  // more taps than voices -> stealing
+        vm.noteOn(frame, 48 + tap, 0.9f, 4000.0f);
+        render(1);
+        vm.noteOff(48 + tap);
+        render(1);
+    }
+
+    vm.noteOn(frame, 60, 0.9f, 4000.0f);   // now HOLD it
+    float rms = 0.0f;
+    int count = 0;
+    for (int b = 0; b < 20; ++b) {
+        std::fill(buf.begin(), buf.end(), 0.0f);
+        vm.renderAdd(buf.data(), (int) buf.size());
+        vm.updateActivity();
+        for (float x : buf) { rms += x * x; ++count; }
+    }
+    REQUIRE(std::sqrt(rms / count) > 0.01f);  // the held note must sound
+}
+
 TEST_CASE("voice manager: polyphony, stealing, note-off")
 {
     VoiceManager vm;
