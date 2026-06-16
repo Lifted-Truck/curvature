@@ -389,6 +389,7 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     voices_.setImpulse(pImpulse_->load());
     voices_.setWarp(pWarp_->load());
     const float mallet = pMallet_->load();
+    voices_.setMallet(mallet);  // live: shapes bow timbre (impulse uses note-on value)
     gainSmoothed_.setTargetValue(juce::Decibels::decibelsToGain(pGain_->load()));
 
     float* out = buffer.getWritePointer(0);

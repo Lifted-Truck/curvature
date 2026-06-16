@@ -38,7 +38,7 @@ public:
         bowAge_ = 0;
         bowNoise_ = 0.0f;
         for (int m = 0; m < kMaxModes; ++m)
-            s_[m] = c_[m] = exc_[m] = bowWeight_[m] = ratio_[m] = 0.0f;
+            s_[m] = c_[m] = exc_[m] = bowWeight_[m] = bowTarget_[m] = ratio_[m] = 0.0f;
     }
 
     bool isActive() const { return active_; }
@@ -94,12 +94,14 @@ public:
         // injection by makeup/sqrt(K) to keep loudness ~constant and leave
         // clean headroom (the crunch threshold was unsatisfyingly low).
         const float norm = 2.6f / std::sqrt((float) std::max(k, 1));
-        // bow drive: low-frequency tilt so the fundamental hums instead of the
-        // bow only lighting up the bright upper modes (coupling kept so bowing
-        // a nodal line still silences that mode, as physics demands)
+        // bowWeight = spatial coupling only (so bowing a nodal line still
+        // silences that mode). The frequency tilt + mallet brightness are
+        // applied live into bowTarget_ at control rate, so the Mallet slider
+        // shapes the sustained bow's timbre as you turn it.
+        bowCutoff_ = malletCutoff;
         for (int m = 0; m < k; ++m) {
             exc_[m] *= norm;
-            bowWeight_[m] = frame.coupling[m] * norm * std::pow(f1_ / freq_[m], 1.7f);
+            bowWeight_[m] = frame.coupling[m] * norm;
         }
 
         updateCoefficients(true);
@@ -117,6 +119,9 @@ public:
 
     // sustained stochastic excitation (crude bow; refined by ear Phase 2+)
     void setBow(float amount) { bow_ = amount; }
+
+    // live mallet cutoff for the bow timbre (shared exciter brightness)
+    void setMallet(float cutoff) { bowCutoff_ = cutoff; }
 
     // mallet impulse level at note-on (independent of bow)
     void setImpulse(float level) { impulse_ = level; }
@@ -162,14 +167,21 @@ public:
                     // short / fast-succession notes still speak, then blooms to
                     // full over ~0.6 s for sustained notes. (A linear 0.6 s
                     // ramp left short notes inaudibly bowed — impulse only.)
+                    // attack = the swell envelope ramping the TARGET (the servo
+                    // grows exponentially, so lowering its rate barely slows the
+                    // attack; ramping the target it chases gives a controllable
+                    // ~0.6 s bloom that still speaks early for short notes).
                     const float swell = std::pow(
-                        std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_)), 0.4f);
-                    const float seed = bow_ * bow_ * 0.004f * swell * bowNoise_;
-                    const float k = 0.02f * swell;
+                        std::min(1.0f, (float) bowAge_ / (0.6f * (float) sr_)), 0.6f);
+                    // seed through bowTarget_ (which carries the mallet rolloff)
+                    // so the Mallet slider shapes the bow: a broadband seed here
+                    // would brighten every mode regardless of the cutoff.
+                    const float seed = 0.05f * bow_ * swell * bowNoise_;
+                    const float k = 0.012f;
                     for (int m = 0; m < numModes_; ++m) {
-                        s_[m] += seed * bowWeight_[m];                 // breath / seed
-                        const float tgt = 5.0f * bow_ * std::abs(bowWeight_[m]);
-                        const float tgt2 = tgt * tgt + 1e-12f;
+                        s_[m] += seed * bowTarget_[m];                 // mallet-shaped breath
+                        const float st = bowTarget_[m] * swell;
+                        const float tgt2 = st * st + 1e-12f;
                         const float amp2 = s_[m] * s_[m] + c_[m] * c_[m];
                         // ADD-ONLY: pump energy when a mode is below its target,
                         // never below 1.0 — the bow must not damp the strike
@@ -235,6 +247,14 @@ private:
 
         const float lnK = std::log(1000.0f);
         for (int m = 0; m < numModes_; ++m) {
+            // bow target (computed at control rate so it tracks the live Mallet
+            // slider + global retune): spatial coupling, a gentle hum tilt, and
+            // the same mallet rolloff the impulse uses -> Mallet = shared
+            // exciter brightness for impulse AND bow.
+            const float mallet = 1.0f / (1.0f + std::pow(freq_[m] / bowCutoff_, 4.0f));
+            const float tilt = std::pow(f1_ / freq_[m], 1.0f);
+            bowTarget_[m] = 5.0f * bow_ * std::abs(bowWeight_[m]) * mallet * tilt;
+
             float t60 = releasing_
                 ? std::min(damping_.releaseT60, damping_.t60)
                 : damping_.t60 * std::pow(f1_ / freq_[m], damping_.tilt);
@@ -277,6 +297,7 @@ private:
 
     float f1_ = 1.0f;
     float bow_ = 0.0f;
+    float bowCutoff_ = 2200.0f;
     float impulse_ = 1.0f;
     float impulseAmp_ = 1.0f;
     float bend_ = 1.0f;
@@ -292,7 +313,8 @@ private:
     float freq_[kMaxModes] = {};
     float ratio_[kMaxModes] = {};  // base (unwarped) f_k/f_1 captured at note-on
     float exc_[kMaxModes] = {};
-    float bowWeight_[kMaxModes] = {};
+    float bowWeight_[kMaxModes] = {};   // spatial coupling (fixed at note-on)
+    float bowTarget_[kMaxModes] = {};   // live target amplitude (mallet+tilt)
     float s_[kMaxModes] = {};
     float c_[kMaxModes] = {};
     float rc_[kMaxModes] = {};

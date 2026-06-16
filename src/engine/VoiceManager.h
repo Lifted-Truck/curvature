@@ -48,6 +48,12 @@ public:
             v.setImpulse(level);
     }
 
+    void setMallet(float cutoff)  // live bow brightness (impulse uses note-on value)
+    {
+        for (auto& v : voices_)
+            v.setMallet(cutoff);
+    }
+
     void setPitchBend(float factor)
     {
         for (auto& v : voices_)
