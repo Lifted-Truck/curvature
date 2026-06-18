@@ -297,6 +297,23 @@ bolt-on.)
   larger default window (1000x620); narrower value boxes.
 - gates: 26 Catch2 cases, pluginval 10, FFT oracle, ASan clean, seal ok.
 
+## Bow level fix (2026-06-14)
+
+Bow was overpowering / clipping (esp. polyphonic, since it sustains). Servo
+target cut 5 -> 0.5 and tilt steepened 1.0 -> 1.3 (darker = less harsh; much
+of the harshness was tanh clipping). Measured raw peak: bow-only 2.4 -> 1.0
+(impulse-only 1.48), so the bow now sits under the impulse with headroom for
+bowed chords. Mallet still shapes bow brightness (live).
+
+## Roadmap additions (Julian)
+
+- **Time/sync toggle for all cyclical features**: switch every rate control
+  (Morph Rate, Ripple Speed, Flow Rate, future LFOs) between free time and
+  host-tempo-synced divisions. Needs host transport (AudioPlayHead) + per-
+  rate mode switch. Own run.
+- **MPE** (anticipated): bow especially will "come alive" with per-note
+  pressure/slide. Still queued.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

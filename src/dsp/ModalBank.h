@@ -252,8 +252,10 @@ private:
             // the same mallet rolloff the impulse uses -> Mallet = shared
             // exciter brightness for impulse AND bow.
             const float mallet = 1.0f / (1.0f + std::pow(freq_[m] / bowCutoff_, 4.0f));
-            const float tilt = std::pow(f1_ / freq_[m], 1.0f);
-            bowTarget_[m] = 5.0f * bow_ * std::abs(bowWeight_[m]) * mallet * tilt;
+            const float tilt = std::pow(f1_ / freq_[m], 1.3f);  // darker = less harsh
+            // level kept below the impulse: the bow SUSTAINS, so polyphonic
+            // bowed chords accumulate — needs headroom to not clip
+            bowTarget_[m] = 0.5f * bow_ * std::abs(bowWeight_[m]) * mallet * tilt;
 
             float t60 = releasing_
                 ? std::min(damping_.releaseT60, damping_.t60)
