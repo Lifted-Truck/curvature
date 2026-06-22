@@ -73,11 +73,8 @@ public:
         const float nyquistGuard = static_cast<float>(0.45 * sr_);
         int k = 0;
         for (int m = 0; m < frame.numModes && k < kMaxModes; ++m) {
-            // spectral warp: f_k = f1 * (f_k/f1)^warp breaks the physical
-            // sqrt-lambda dispersion (warp 1 = physical, >1 spreads into
-            // impossible super-stretched spectra, <1 compresses toward a hum)
-            const float warped = std::pow(frame.ratio[m], warp_);
-            const float f = noteHz * warped;
+            // warp (dispersion) + harmonic snap; see applySpectralTransform
+            const float f = noteHz * applySpectralTransform(frame.ratio[m]);
             if (f >= nyquistGuard)
                 continue;  // skip (mode order isn't guaranteed ascending after matching)
             ratio_[k] = frame.ratio[m];  // base (unwarped) ratio for live warp
@@ -131,6 +128,10 @@ public:
 
     // spectral warp exponent (1 = physical); read at note-on
     void setWarp(float w) { warp_ = w; }
+
+    // harmonicity: 0 = physical ratios, 1 = partials snapped to the harmonic
+    // series (the alien object becomes a pitched/harmonic tone)
+    void setHarmonic(float h) { harmonic_ = h; }
 
     // add this voice into out[0..n)
     void renderAdd(float* out, int n)
@@ -226,6 +227,18 @@ public:
     }
 
 private:
+    // spectral transform applied to a base partial ratio: warp (dispersion)
+    // then harmonic snap (pull toward the nearest integer harmonic of f1).
+    float applySpectralTransform(float ratio) const
+    {
+        float w = warp_ == 1.0f ? ratio : std::pow(ratio, warp_);
+        if (harmonic_ > 1e-4f) {
+            const float snapped = std::max(1.0f, std::round(w));
+            w = (1.0f - harmonic_) * w + harmonic_ * snapped;
+        }
+        return w;
+    }
+
     void updateCoefficients(bool immediate)
     {
         // Global Flow mode: retune at control rate so the evolving spectrum
@@ -236,11 +249,9 @@ private:
         if (globalFrame_ != nullptr) {
             const float nyquistGuard = static_cast<float>(0.45 * sr_);
             const int gk = std::min(numModes_, globalFrame_->numModes);
-            const bool unitWarp = warp_ == 1.0f;
             for (int m = 0; m < numModes_; ++m) {
                 const float base = m < gk ? globalFrame_->ratio[m] : ratio_[m];
-                const float warped = unitWarp ? base : std::pow(base, warp_);
-                freq_[m] = std::min(noteHz_ * warped, nyquistGuard);
+                freq_[m] = std::min(noteHz_ * applySpectralTransform(base), nyquistGuard);
             }
             f1_ = freq_[0] > 0.0f ? freq_[0] : noteHz_;
         }
@@ -304,6 +315,7 @@ private:
     float impulseAmp_ = 1.0f;
     float bend_ = 1.0f;
     float warp_ = 1.0f;
+    float harmonic_ = 0.0f;
     float bowNoise_ = 0.0f;
     int bowAge_ = 0;
     int injectPos_ = 0;

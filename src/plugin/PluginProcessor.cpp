@@ -37,6 +37,7 @@ CurvSynthProcessor::CurvSynthProcessor()
     pMemory_ = apvts.getRawParameterValue("memory");
     pMemRate_ = apvts.getRawParameterValue("memrate");
     pWarp_ = apvts.getRawParameterValue("warp");
+    pHarmonic_ = apvts.getRawParameterValue("harmonic");
     pStrikeDeform_ = apvts.getRawParameterValue("strikedeform");
     pStrikeRipple_ = apvts.getRawParameterValue("strikeripple");
     pRippleSpeed_ = apvts.getRawParameterValue("ripplespeed");
@@ -124,6 +125,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout CurvSynthProcessor::createLa
     // >1 stretches into impossible spectra, <1 compresses toward a unison hum
     layout.add(std::make_unique<P>("warp", "Spectral Warp",
                                    juce::NormalisableRange<float>(0.2f, 2.5f), 1.0f));
+    // harmonic: morph partials toward the harmonic series (0 = physical/alien,
+    // 1 = snapped to integer harmonics -> the object becomes a pitched tone)
+    layout.add(std::make_unique<P>("harmonic", "Harmonic",
+                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f));
     // strike-responsive deformation: each note-on dents the manifold inward
     // at the strike point, velocity-scaled — the performance reshapes the
     // instrument (healed per Memory; at Memory = 1 the object scars)
@@ -388,6 +393,7 @@ void CurvSynthProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     voices_.setBow(pBow_->load());
     voices_.setImpulse(pImpulse_->load());
     voices_.setWarp(pWarp_->load());
+    voices_.setHarmonic(pHarmonic_->load());
     const float mallet = pMallet_->load();
     voices_.setMallet(mallet);  // live: shapes bow timbre (impulse uses note-on value)
     gainSmoothed_.setTargetValue(juce::Decibels::decibelsToGain(pGain_->load()));

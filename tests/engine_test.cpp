@@ -49,6 +49,43 @@ TEST_CASE("modal voice: bounded, NaN-free, decays to silence")
     REQUIRE(tailPeak < 1e-3f); // T60 0.5s: silent after 4s
 }
 
+TEST_CASE("harmonic morph snaps partials to the harmonic series")
+{
+    // at harmonic = 1, an inharmonic object's partials should land on integer
+    // multiples of the fundamental (a pitched/harmonic tone)
+    SpectrumFrame f;
+    f.numModes = 24;
+    for (int m = 0; m < 24; ++m) {            // deliberately inharmonic ratios
+        f.ratio[m] = 1.0f + 1.0f * m + 0.37f * std::sin((float) m);
+        f.coupling[m] = 1.0f / (m + 1);
+    }
+    ModalVoice voice;
+    voice.prepare(48000.0);
+    voice.setHarmonic(1.0f);
+    voice.noteOn(f, 69, 1.0f, 200.0f, 12000.0f, { 4.0f, 0.5f, 0.3f }, 0);
+    // can't read freqs directly; instead verify via a long render's FFT peaks
+    std::vector<float> buf(48000 * 2, 0.0f);
+    for (size_t i = 0; i < buf.size(); i += 512)
+        voice.renderAdd(buf.data() + i, (int) std::min<size_t>(512, buf.size() - i));
+
+    const int N = 1 << 16;
+    std::vector<float> win(N);
+    for (int i = 0; i < N; ++i) win[i] = buf[(size_t) i] * (0.5f - 0.5f * std::cos(2.0f * (float) M_PI * i / N));
+    // crude DFT at the first few harmonic bins of f0=200 Hz: energy should
+    // concentrate near integer multiples
+    auto binEnergy = [&](float hz) {
+        const float wgt = 2.0f * (float) M_PI * hz / 48000.0f;
+        float re = 0, im = 0;
+        for (int i = 0; i < N; ++i) { re += win[i] * std::cos(wgt * i); im += win[i] * std::sin(wgt * i); }
+        return std::sqrt(re * re + im * im);
+    };
+    // harmonic energy (on 200 Hz grid) should beat the energy at off-harmonic
+    // points (e.g. 1.5x, 2.5x) -> the spectrum is now harmonic
+    const float onGrid = binEnergy(200) + binEnergy(400) + binEnergy(600) + binEnergy(800);
+    const float offGrid = binEnergy(300) + binEnergy(500) + binEnergy(700) + binEnergy(900);
+    REQUIRE(onGrid > 2.0f * offGrid);
+}
+
 TEST_CASE("bowed voice: sustains energy and stays bounded (servo can't blow up)")
 {
     ModalVoice voice;

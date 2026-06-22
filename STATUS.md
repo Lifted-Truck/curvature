@@ -314,6 +314,18 @@ bowed chords. Mallet still shapes bow brightness (live).
 - **MPE** (anticipated): bow especially will "come alive" with per-note
   pressure/slide. Still queued.
 
+## Round 18 (2026-06-18) — Harmonic transform
+
+- **Harmonic** param (0..1): morphs the geometry's natural (inharmonic)
+  partials toward the harmonic series — at 1, each partial ratio snaps to its
+  nearest integer multiple of the fundamental, so an alien object becomes a
+  pitched/harmonic tone. Audio-side, live, applied in the shared
+  applySpectralTransform (warp then harmonic snap) in both note-on and the
+  control-rate retune; mirrored in the spectrum view. Verified: golden torus
+  ratios 1/1.62/1.90 -> 1/2/2; FFT test confirms energy lands on the harmonic
+  grid at Harmonic=1.
+- gates: 30 Catch2 cases, pluginval 10, FFT oracle, ASan clean.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

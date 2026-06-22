@@ -342,13 +342,20 @@ void SpectrumView::paint(juce::Graphics& g)
     const float combFreq = proc_.apvts.getRawParameterValue("combfreq")->load();
     const float combPeriod = 2.0f + 14.0f * (1.0f - combFreq);
     const float warp = proc_.apvts.getRawParameterValue("warp")->load();
+    const float harmonic = proc_.apvts.getRawParameterValue("harmonic")->load();
+    auto xform = [warp, harmonic](float r) {
+        float v = std::pow(r, warp);
+        if (harmonic > 1e-4f)
+            v = (1.0f - harmonic) * v + harmonic * std::max(1.0f, std::round(v));
+        return v;
+    };
 
     juce::Path path;
     for (int m = 0; m < numModes_; ++m) {
         path.clear();
         for (int i = 0; i < histLen_; ++i) {
             const float x = 26.0f + (w - 26.0f) * (float) i / (float) (kHist - 1);
-            const float y = fy(std::pow(hist_[i][m], warp));
+            const float y = fy(xform(hist_[i][m]));
             i == 0 ? path.startNewSubPath(x, y) : path.lineTo(x, y);
         }
         float alpha = m == 0 ? 0.95f : 0.45f;
@@ -417,8 +424,8 @@ CurvSynthEditor::CurvSynthEditor(CurvSynthProcessor& proc)
              { "mallet", "Mallet", " Hz" }, { "impulse", "Impulse", "" },
              { "bow", "Bow", "" }, { "t60", "T60", " s" },
              { "tilt", "Tilt", "" }, { "release", "Release", " s" },
-             { "warp", "Spec Warp", "" }, { "comb", "Comb", "" },
-             { "combfreq", "Comb Freq", "" },
+             { "warp", "Spec Warp", "" }, { "harmonic", "Harmonic", "" },
+             { "comb", "Comb", "" }, { "combfreq", "Comb Freq", "" },
              { "flowrate", "Flow Rate", "" }, { "sharpness", "Sharpness", "" },
              { "press", "Press", "" }, { "presssize", "Press Size", "" },
              { "strikedeform", "Strike Kick", "" }, { "strikeripple", "Strike Ripple", "" },
@@ -496,7 +503,8 @@ juce::String CurvSynthEditor::buildStateReport() const
       << juce::String(raw("comb"), 2) << "\n"
       << "flow: " << choice("flowmode") << ", rate " << juce::String(rate, 2)
       << ", sharpness " << juce::String(raw("sharpness"), 2) << "\n"
-      << "warp: " << juce::String(raw("warp"), 2) << " (1 = physical), mem rate "
+      << "warp: " << juce::String(raw("warp"), 2) << " (1 = physical), harmonic "
+      << juce::String(raw("harmonic"), 2) << ", mem rate "
       << juce::String(raw("memrate"), 2) << "\n"
       << "voices: " << choice("voicemode") << ", impulse " << juce::String(raw("impulse"), 2)
       << ", bow " << juce::String(raw("bow"), 2) << "\n"

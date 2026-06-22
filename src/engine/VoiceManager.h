@@ -66,6 +66,12 @@ public:
             v.setWarp(w);
     }
 
+    void setHarmonic(float h)
+    {
+        for (auto& v : voices_)
+            v.setHarmonic(h);
+    }
+
     void noteOn(const SpectrumFrame& frame, int midiNote, float velocity, float malletCutoff)
     {
         ModalVoice* slot = nullptr;
