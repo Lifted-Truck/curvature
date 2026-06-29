@@ -326,6 +326,24 @@ bowed chords. Mallet still shapes bow brightness (live).
   grid at Harmonic=1.
 - gates: 30 Catch2 cases, pluginval 10, FFT oracle, ASan clean.
 
+## Round 19 (2026-06-29) — Hyperbolic-like (4D) preset
+
+Julian liked the chaotic-3-manifold audition; shipped as a preset.
+- **"Hyperbolic-like (4D)"** (Torus3DChaotic): flat 3-torus tet mesh + a fixed
+  strong high-frequency CONFORMAL metric -> genuine GOE level statistics
+  (<r>=0.54, full GOE; vs flat torus 0.00, massively degenerate). Dense,
+  irregular, level-repelled shimmer — the hyperbolic sound family in 3D.
+- Honest course-correction mid-build: vertex DISPLACEMENT (first attempt) only
+  weakly lifted degeneracies once a latent period bug in the Python FEM was
+  fixed; switched to a conformal metric (not capped by tet validity) which
+  reaches real GOE. TetMesh carries a baked `conformal` field; buildTetLaplacian
+  combines it with gesture u. Fixed `fem_laplacian_3d` period (was max+dx,
+  wrong for non-lattice meshes).
+- gates: 31 Catch2 cases (incl. chaotic low-mode exact match + GOE
+  degeneracy-lifting), pluginval 10, FFT oracle, ASan clean. Reuses the tet
+  pipeline (cheap). Canonical constant-curvature hyperbolic manifold remains
+  an optional "purest" follow-up.
+
 ## Remaining Phase 3 candidates (next runs, order by feedback)
 
 MPE, strike-point-per-note, metric-morph targets as a parameter,

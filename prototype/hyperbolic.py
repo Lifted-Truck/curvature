@@ -24,29 +24,35 @@ import numpy as np
 from .manifold4d import flat_3torus, fem_laplacian_3d, solve_modes_3d
 
 
-def perturbed_3torus(grid=12, amp=0.35, seed=0):
-    """Flat 3-torus tet mesh with a smooth, periodic random displacement of the
-    vertices -> a generic (chaotic) metric on T^3. Connectivity (topology) is
-    unchanged; only edge lengths/curvature change. amp is in units of the cell
-    size; kept < 0.5 so tets stay non-degenerate."""
+# Fixed deterministic conformal-factor waves (k integer for periodicity, phase).
+# A STRONG high-frequency conformal metric on the 3-torus -> real curvature
+# variation -> chaotic geodesics -> GOE statistics (the hyperbolic signature).
+# (Vertex displacement is too gentle once the period is correct; conformal
+# scaling isn't capped by tet validity, so it reaches full GOE.) Identical in
+# Python and C++ so spectra cross-check.
+_CHAOS_WAVES = [
+    ((1, 0, 0), 0.40), ((0, 1, 0), 1.10), ((0, 0, 1), 2.00), ((1, 1, 0), 0.70),
+    ((0, 1, 1), 1.50), ((2, 0, 1), 1.00), ((2, 1, 0), 0.30), ((1, 0, 2), 1.80),
+    ((0, 2, 1), 0.90), ((1, 2, 1), 2.20), ((3, 0, 1), 0.50), ((0, 3, 1), 1.30),
+    ((2, 2, 1), 0.80),
+]
+CHAOS_AMP = 1.4
+
+
+def chaotic_conformal(V, amp=CHAOS_AMP):
+    """The fixed chaotic conformal factor sampled at vertices V (normalized to
+    +/- amp)."""
+    u = np.zeros(V.shape[0])
+    for k, phase in _CHAOS_WAVES:
+        u += np.sin(2 * np.pi * (k[0] * V[:, 0] + k[1] * V[:, 1] + k[2] * V[:, 2]) + phase)
+    return u * (amp / max(np.abs(u).max(), 1e-9))
+
+
+def chaotic_3torus(grid=12, amp=CHAOS_AMP):
+    """Flat 3-torus tet mesh + the fixed chaotic conformal factor (deterministic,
+    reproducible in C++). Returns (V, tets, spacing, conformal)."""
     V, tets, sp = flat_3torus(grid, grid, grid, 1.0, 1.0, 1.0)
-    dx = sp[0]
-    rng = np.random.default_rng(seed)
-
-    # smooth periodic displacement field: a few low Fourier modes per axis
-    disp = np.zeros_like(V)
-    for _ in range(6):
-        k = rng.integers(1, 4, size=3)
-        phase = rng.uniform(0, 2 * np.pi, size=3)
-        dirn = rng.standard_normal(3)
-        dirn /= np.linalg.norm(dirn)
-        wave = np.ones(V.shape[0])
-        for ax in range(3):
-            wave = wave * np.sin(2 * np.pi * k[ax] * V[:, ax] + phase[ax])
-        disp += np.outer(wave, dirn)
-
-    disp *= amp * dx / max(np.abs(disp).max(), 1e-9)
-    return V + disp, tets, sp
+    return V, tets, sp, chaotic_conformal(V, amp)
 
 
 def gap_ratio(lam, drop=4):
@@ -77,11 +83,10 @@ def main():
     lam_aniso, _ = solve_modes_3d(L, M, k=K)
     print(f"  flat aniso 3-torus     <r> = {gap_ratio(lam_aniso):.3f}")
 
-    for amp in (0.25, 0.4):
-        V, tets, sp = perturbed_3torus(12, amp=amp, seed=1)
-        L, M = fem_laplacian_3d(V, tets, sp)
-        lam, _ = solve_modes_3d(L, M, k=K)
-        print(f"  chaotic 3-manifold a={amp} <r> = {gap_ratio(lam):.3f}   (expect ~0.53 = GOE)")
+    V, tets, sp, u = chaotic_3torus(12)
+    L, M = fem_laplacian_3d(V, tets, sp, period=(1, 1, 1), conformal=u)
+    lam, _ = solve_modes_3d(L, M, k=K)
+    print(f"  chaotic 3-manifold     <r> = {gap_ratio(lam):.3f}   (expect ~0.53 = GOE)")
 
 
 if __name__ == "__main__":

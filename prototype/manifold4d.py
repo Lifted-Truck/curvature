@@ -62,19 +62,25 @@ def flat_3torus(nx=10, ny=10, nz=10, a=1.0, b=1.0, c=1.0):
     return V, np.array(tets, dtype=np.int64), (dx, dy, dz)
 
 
-def fem_laplacian_3d(V, tets, spacing):
+def fem_laplacian_3d(V, tets, spacing, period=None, conformal=None):
     """3D FEM stiffness L (PSD, L*const=0) and lumped mass M for a tet mesh.
 
     Per tet: gradients of the linear barycentric basis are constant; element
     stiffness K_ij = vol * (grad phi_i . grad phi_j). Edge vectors use the
-    periodic spacing so wrap-around tets get correct (non-displacement) geometry.
+    periodic minimal image. `period` is the lattice period (a,b,c); if None it
+    is inferred as max+spacing, which is correct ONLY for an unperturbed lattice
+    (the max shifts under vertex perturbation — pass period explicitly then).
     """
     dx, dy, dz = spacing
     n = V.shape[0]
+    conformal = None if conformal is None else np.asarray(conformal)
 
     ii, jj, vv = [], [], []
     mass = np.zeros(n)
-    box = np.array([V[:, 0].max() + dx, V[:, 1].max() + dy, V[:, 2].max() + dz])
+    if period is None:
+        box = np.array([V[:, 0].max() + dx, V[:, 1].max() + dy, V[:, 2].max() + dz])
+    else:
+        box = np.asarray(period, dtype=float)
 
     for tet in tets:
         p = V[tet]
@@ -84,6 +90,11 @@ def fem_laplacian_3d(V, tets, spacing):
         M3 = np.stack([e[1], e[2], e[3]], axis=1)  # columns are edge vectors
         det = np.linalg.det(M3)
         vol = abs(det) / 6.0
+        # conformal scale (per-tet uniform): stiffness *= s, mass *= s^3
+        sStiff = sMass = 1.0
+        if conformal is not None:
+            s = np.exp(np.mean(conformal[tet]))
+            sStiff, sMass = s, s ** 3
         if vol < 1e-15:
             continue
         Ginv = np.linalg.inv(M3)          # rows give grad of b1,b2,b3
@@ -93,8 +104,8 @@ def fem_laplacian_3d(V, tets, spacing):
         for x in range(4):
             for y in range(4):
                 ii.append(tet[x]); jj.append(tet[y])
-                vv.append(vol * grads[x] @ grads[y])
-            mass[tet[x]] += vol / 4.0
+                vv.append(sStiff * vol * grads[x] @ grads[y])
+            mass[tet[x]] += sMass * vol / 4.0
 
     L = csr_matrix(coo_matrix((vv, (ii, jj)), shape=(n, n)))
     return L, diags(mass).tocsr()

@@ -19,14 +19,14 @@ Both struck at 110 Hz, same damping/mallet.
 
 Oracle (`prototype/hyperbolic.py`): gap-ratio <r>, Poisson/integrable 0.386
 vs GOE/chaotic 0.530. Flat torus 0.00 (sub-Poisson, degenerate) ->
-chaotic 0.43.
+chaotic 0.54 = FULL GOE.
 
-Honest caveat: this proxy is a generic chaotic metric, not constant negative
-curvature. A canonical hyperbolic manifold would reach FULL GOE (~0.53) — the
-purest maximally-irregular version. But the chaotic 3-manifold already
-delivers the dense-irregular character and is shippable as a preset cheaply.
+How it's built: a STRONG fixed high-frequency CONFORMAL metric on the 3-torus
+(not vertex displacement — that was too gentle once the period was computed
+correctly, and an early bug made it look stronger than it was). The conformal
+factor isn't capped by tet validity, so it reaches genuine GOE. This IS a
+real negatively-/variably-curved 3-manifold spectrum; the only thing a
+canonical hyperbolic manifold (Seifert-Weber, Weeks) would add is constant
+(rather than varying) curvature — same audible GOE family.
 
-DECISION FOR JULIAN: (a) ship the chaotic 3-manifold as a preset now (cheap,
-this sound), and/or (b) commission the canonical hyperbolic manifold later
-(the purest version, a real geometry project), or (c) drop it if the sound
-doesn't grab you.
+SHIPPED as the preset "Hyperbolic-like (4D)" (Torus3DChaotic).

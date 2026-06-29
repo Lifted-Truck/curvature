@@ -86,10 +86,42 @@ TetMesh makeLatticeTorus3(int nx, int ny, int nz, const double basis[3][3])
     return m;
 }
 
+TetMesh makeChaoticTorus3(int nx, int ny, int nz, double amp)
+{
+    TetMesh m = makeFlatTorus3(nx, ny, nz, 1.0, 1.0, 1.0);
+    // fixed deterministic conformal-factor waves (k, phase) — identical to
+    // prototype/hyperbolic.py so the spectra cross-check. A strong
+    // high-frequency conformal metric -> GOE statistics (hyperbolic-like).
+    static const struct { int k[3]; double phase; } waves[] = {
+        { { 1, 0, 0 }, 0.40 }, { { 0, 1, 0 }, 1.10 }, { { 0, 0, 1 }, 2.00 },
+        { { 1, 1, 0 }, 0.70 }, { { 0, 1, 1 }, 1.50 }, { { 2, 0, 1 }, 1.00 },
+        { { 2, 1, 0 }, 0.30 }, { { 1, 0, 2 }, 1.80 }, { { 0, 2, 1 }, 0.90 },
+        { { 1, 2, 1 }, 2.20 }, { { 3, 0, 1 }, 0.50 }, { { 0, 3, 1 }, 1.30 },
+        { { 2, 2, 1 }, 0.80 },
+    };
+    m.conformal.assign(m.V.size(), 0.0);
+    double maxAbs = 0.0;
+    for (size_t i = 0; i < m.V.size(); ++i) {
+        double u = 0.0;
+        for (const auto& w : waves)
+            u += std::sin(2.0 * M_PI * (w.k[0] * m.V[i][0] + w.k[1] * m.V[i][1]
+                                        + w.k[2] * m.V[i][2]) + w.phase);
+        m.conformal[i] = u;
+        maxAbs = std::max(maxAbs, std::abs(u));
+    }
+    const double scale = amp / std::max(maxAbs, 1e-9);
+    for (double& u : m.conformal)
+        u *= scale;
+    return m;
+}
+
 LaplacianPair buildTetLaplacian(const TetMesh& mesh, const Eigen::VectorXd& u)
 {
     const int n = mesh.numVertices();
-    const bool conformal = u.size() == n;
+    // effective conformal factor = baked base (chaotic preset) + gesture u
+    const bool hasBase = (int) mesh.conformal.size() == n;
+    const bool hasU = u.size() == n;
+    const bool conformal = hasBase || hasU;
 
     // periodic minimal image uses the lattice basis: e -= lat * round(lat^-1 e)
     Eigen::Matrix3d lat;
@@ -122,8 +154,12 @@ LaplacianPair buildTetLaplacian(const TetMesh& mesh, const Eigen::VectorXd& u)
         // local size) — the same conformal behaviour as the 2D metric.
         double sStiff = 1.0, sMass = 1.0;
         if (conformal) {
-            const double um = 0.25 * (u[tet[0]] + u[tet[1]] + u[tet[2]] + u[tet[3]]);
-            const double s = std::exp(um);
+            double um = 0.0;
+            for (int j = 0; j < 4; ++j) {
+                if (hasBase) um += mesh.conformal[(size_t) tet[j]];
+                if (hasU) um += u[tet[j]];
+            }
+            const double s = std::exp(0.25 * um);
             sStiff = s;
             sMass = s * s * s;
         }

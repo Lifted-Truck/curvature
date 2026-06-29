@@ -16,7 +16,8 @@ Mesh makeFlatTorus(int nx, int ny, double a, double b);
 Mesh loadObjFromString(const char* data, size_t size, const std::string& name);
 
 enum class PresetId { Icosphere = 0, Torus11, TorusGolden, TorusString, Genus2,
-                      Mandelbulb, Torus3D, Torus3DAniso, Torus3DOblique, Count };
+                      Mandelbulb, Torus3D, Torus3DAniso, Torus3DOblique,
+                      Torus3DChaotic, Count };
 
 inline const char* presetName(PresetId id)
 {
@@ -30,6 +31,7 @@ inline const char* presetName(PresetId id)
         case PresetId::Torus3D:       return "3-Torus (4D)";
         case PresetId::Torus3DAniso:  return "3-Torus aniso (4D)";
         case PresetId::Torus3DOblique:return "3-Torus oblique (4D)";
+        case PresetId::Torus3DChaotic:return "Hyperbolic-like (4D)";
         default:                      return "?";
     }
 }
@@ -44,7 +46,7 @@ inline bool presetNeedsObj(PresetId id)
 inline bool presetIs4D(PresetId id)
 {
     return id == PresetId::Torus3D || id == PresetId::Torus3DAniso
-           || id == PresetId::Torus3DOblique;
+           || id == PresetId::Torus3DOblique || id == PresetId::Torus3DChaotic;
 }
 
 // build the tet mesh for a 4D preset
@@ -62,6 +64,8 @@ inline TetMesh makeTetPreset(PresetId id)
                                      { 0.0, 0.0, t   } };
         return makeLatticeTorus3(12, 12, 12, basis);
     }
+    if (id == PresetId::Torus3DChaotic)
+        return makeChaoticTorus3(12, 12, 12, 1.4);
     return makeFlatTorus3(12, 12, 12, 1.0, 1.0, 1.0);
 }
 

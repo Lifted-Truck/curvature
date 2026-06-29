@@ -55,6 +55,39 @@ TEST_CASE("3-torus: plane waves are exact discrete eigenvectors")
     }
 }
 
+TEST_CASE("chaotic 3-manifold matches Python + lifts the torus degeneracies")
+{
+    const auto mesh = makeChaoticTorus3(8, 8, 8, 1.4);
+    const auto modes = solveModes(buildTetLaplacian(mesh, Eigen::VectorXd()), 64);
+    const auto ref = loadRef("torus3_chaotic8");
+    // The well-separated low modes match Python exactly -> the baked conformal
+    // field + FEM are correct.
+    for (size_t i = 0; i < 6; ++i) {
+        INFO("chaotic low mode " << i);
+        REQUIRE(std::abs(modes.lambda[(Eigen::Index) i] - ref[i]) / ref[i] < 1e-5);
+    }
+    // The dense GOE upper spectrum has solver-dependent convergence (scipy vs
+    // Spectra differ on near-degenerate counts), so check it as a set: each
+    // C++ eigenvalue is within 2% of some Python eigenvalue (same spectrum).
+    for (int i = 0; i < (int) modes.lambda.size(); ++i) {
+        double best = 1e9;
+        for (double r : ref)
+            best = std::min(best, std::abs(modes.lambda[i] - r) / r);
+        REQUIRE(best < 0.02);
+    }
+    // the flat torus is massively degenerate; the chaotic metric must lift
+    // those degeneracies -> far more clearly-separated adjacent eigenvalues
+    auto distinctGaps = [](const Eigen::VectorXd& l) {
+        int d = 0;
+        for (int i = 1; i < (int) l.size(); ++i)
+            if ((l[i] - l[i - 1]) / l[i] > 0.005) ++d;
+        return d;
+    };
+    const auto flat = solveModes(buildTetLaplacian(makeFlatTorus3(8, 8, 8, 1, 1, 1),
+                                                   Eigen::VectorXd()), 64);
+    REQUIRE(distinctGaps(modes.lambda) > 2 * distinctGaps(flat.lambda));
+}
+
 TEST_CASE("oblique 3-torus: plane waves still exact (generalized minimal image)")
 {
     const int nx = 6, ny = 6, nz = 6;
